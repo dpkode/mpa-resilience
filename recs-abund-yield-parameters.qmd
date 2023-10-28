@@ -1,0 +1,1464 @@
+---
+title: "Recruits, abundance, and yield time series and contours"
+author: "Botsford, Hastings, White, and Kilduff"
+execute: 
+  warning: false
+format:
+  html: 
+    page-layout: full
+    embed-resources: true
+    anchor-sections: true
+    fig-width: 7
+    fig-height: 5
+  pdf:
+    fig-width: 7
+    fig-height: 5
+  docx:
+    fig-width: 7
+    fig-height: 5
+editor: visual
+params:
+  experiment: "larval_pool_blue_rockfish_mei_135_75"
+---
+
+```{r}
+#| label: Extract experiemental parameters
+#| echo: false
+
+exp <- params$experiment
+
+valid_dispersal <- c("larval_pool", "no_dispersal")
+valid_species <- c("blue_rockfish", "cabezon", "china_rockfish", "pacific_cod", "kelp_bass")
+valid_noise <- c("mei_135_75", "white_135_75")
+
+current_dispersal <- valid_dispersal[stringr::str_detect(exp, valid_dispersal)]
+current_species <- valid_species[stringr::str_detect(exp, valid_species)]
+current_noise <- valid_noise[stringr::str_detect(exp, valid_noise)]
+
+pretty_dispersal <- c("Larval pool", "No dispersal")
+pretty_species <- c("Blue rockfish", "Cabezon", "China rockfish", "Pacific cod", "Kelp bass")
+pretty_noise <- c("ENSO", "White")
+
+nice_dispersal <- pretty_dispersal[stringr::str_detect(exp, valid_dispersal)]
+nice_species <- pretty_species[stringr::str_detect(exp, valid_species)]
+nice_noise <- pretty_noise[stringr::str_detect(exp, valid_noise)]
+
+out_path <- file.path("output", current_species)
+
+if (!dir.exists(out_path)) {
+  dir.create(out_path, recursive = TRUE) 
+}
+
+```
+
+### Experiment: `r params$experimenft`
+
+This is a parameterized report for:
+
+-   `r nice_species`
+-   `r nice_noise`
+-   `r nice_dispersal`
+
+```{r}
+#| label: load-packages-data
+#| echo: false
+
+library(targets)
+suppressMessages(library(tidyverse))
+library(duckdb)
+options(dplyr.summarise.inform = FALSE)
+# Load relevant data from target objexts
+tar_load(sim_len)
+tar_load(species_flep_fished_ind)
+tar_load(fishing_mortality_values)
+tar_load(species_parms)
+tar_load(sim_species_parms)
+tar_load(sim_species_derived_vars)
+
+# Load project functions
+source("R/functions.R")
+
+# constants
+burn_in_parm <- 500
+sim_len_parm <- 135
+
+x_text_position_parm <- 550
+
+waa_g <- sim_species_parms[[nice_species]][["biom_const"]] * sim_species_derived_vars[[nice_species]][["length_at_age"]] ^
+                    sim_species_parms[[nice_species]][["biom_exp"]]
+
+
+# use functions to create useful data structures
+# FLEP to F reference tables by species
+spec_fleps_2_fs <-
+  get_fs_from_fleps(species = nice_species,
+                    flep_inds = species_flep_fished_ind,
+                    f_vals =  fishing_mortality_values) 
+
+
+```
+
+```{r}
+#| label: functions
+#| echo: false
+
+# query specified simulation results and aggregate yield or recruits for subsequent analyses
+qry_results_table_agg <- function(ddb_table,
+                                  metric = c("recruits", "yield", "abundance"),
+                                  burn_in = 500,
+                                  sim_len = 135,
+                                  reserve_fracs = NULL,
+                                  flep_ratios = NULL,
+                                  dir_duckdb = "data/sim_out.duckdb") {
+  sim_yrs <- burn_in + sim_len
+  age_filter <- ifelse(metric == "recruits", "age = 1 and ", "")
+  
+  reserve_fracs_qry <- ifelse(length(reserve_fracs) > 0,
+                              paste0(" and cast(reserve_frac as decimal(5, 2)) in (", stringr::str_flatten_comma(format(reserve_fracs,  nsmall = 2)), ")"),
+                              "")
+  flep_ratios_qry <- ifelse(length(flep_ratios) > 0, 
+                           paste0(" and cast(reserve_frac as decimal(5, 2)) in (", stringr::str_flatten_comma(format(flep_ratios, nsmall = 2)), ")"),
+                           "")
+  
+  agg_qry <-
+    paste0(
+      "SELECT experiment, noise, species, bh_alpha, rec_sd, reserve_frac,
+             flep_ratio, sim_num, year, age, sum(",
+      ifelse(metric == "yield", "yield", "number"), ") as ",  metric,
+      " FROM '", ddb_table,
+      "' WHERE ", age_filter, "year > ", burn_in,
+      " and year <= ", sim_yrs,
+      reserve_fracs_qry, 
+      flep_ratios_qry,
+      " GROUP BY experiment, noise, species, bh_alpha, rec_sd, reserve_frac, flep_ratio, sim_num, year, age
+        ORDER BY experiment, noise, species, bh_alpha, rec_sd, reserve_frac, flep_ratio, sim_num, year, age"
+    )
+  con <- DBI::dbConnect(duckdb::duckdb(),
+                      dbdir = dir_duckdb,
+                      read_only = FALSE)
+  agg_df <- dbGetQuery(con, agg_qry)
+  DBI::dbDisconnect(con, shutdown = TRUE)
+  return(dplyr::tibble(agg_df))
+}
+
+make_df_yield_exp_spec_noise_rec_fs <-
+  function(df_exp_spec_noise_rec,
+           fleps_2_fs,
+           f_maxes_yield) {
+    df_exp_spec_noise_rec_fs <- df_exp_spec_noise_rec |>
+      left_join(.,
+                y = fleps_2_fs,
+                by = join_by(flep_ratio_ch == flep_vals_ch)) %>%
+      dplyr::mutate(f_fmsy = round(f_vals / f_maxes_yield, 2))
+    return(df_exp_spec_noise_rec_fs)
+  }
+
+
+get_exp_details <- function(df_after_qry_results_table_agg) {
+  exp_details <- df_after_qry_results_table_agg %>%
+  summarise(experiment = unique(experiment), 
+            noise = unique(noise),
+            species = unique(species),
+            bh_alpha = round(unique(bh_alpha), 4),
+            rec_sd = unique(rec_sd))
+  return(exp_details)
+}
+
+
+get_f_maxes_yield <- function(yield_disp_sp_noise, 
+                              fleps_2_fs) {
+  # Find the fishing mortality level that maximizes yield
+  # with no reserves
+  F_maxes_yield <- yield_disp_sp_noise %>%
+  dplyr::filter(near(reserve_frac, 0)) %>%
+  dplyr::left_join(., y = fleps_2_fs, by = join_by(flep_ratio_ch == flep_vals_ch)) %>%
+  dplyr::group_by(f_vals, flep_ratio) %>%
+  dplyr::summarise(yields = sum(yield)) %>%
+  dplyr::ungroup() %>%
+  dplyr::filter(yields == max(yields)) %>%
+  .$f_vals
+  
+  return(F_maxes_yield[[1]])
+}
+
+
+# Time series prep tplotting function
+make_df_exp_spec_noise_rec_fs <- function(df_exp_spec_noise_rec,
+                                          fleps_2_fs,
+                                          f_maxes_yield) {
+  df_exp_spec_noise_rec_fs <- df_exp_spec_noise_rec %>%
+    mutate(flep_ratio_ch = as.character(flep_ratio)) %>%
+      left_join(., y = fleps_2_fs, by = join_by(flep_ratio_ch == flep_vals_ch)) %>%
+      dplyr::mutate(f_fmsy = round(f_vals / f_maxes_yield, 2)) %>%
+    select(-flep_vals)
+  return(df_exp_spec_noise_rec_fs)
+}
+
+
+prep_ann_yield_for_plot <- function(df_exp_spec_noise_rec_fs,
+                                    frac_reserves = c(0, 0.25, 0.50),
+                                    f_fmsys = c(0.52, 1.00, 2.09)) {
+  
+        
+  if (length(f_fmsys) < 1 | is.null(f_fmsys)) {
+    stop("Please specify f_fmsy values to use")
+  }
+  
+  if (length(frac_reserves) < 1 | is.null(frac_reserves)) {
+    stop("Please specify frac_reserves values to use")
+  }
+  
+  # make a sub function
+    med_yield <- df_exp_spec_noise_rec_fs %>%
+      dplyr::filter(near(f_fmsy, 1), near(reserve_frac, 0))  %>%
+      dplyr::group_by(
+        experiment,
+        noise,
+        species,
+        bh_alpha,
+        rec_sd,
+        reserve_frac,
+        flep_ratio,
+        sim_num,
+        year
+      ) %>%
+      dplyr::summarise(ann_yield = sum(yield)) %>%
+      dplyr::ungroup() %>%
+      dplyr::summarise(med_yield_f_fmsy = median(ann_yield)) %>%
+      .$med_yield_f_fmsy
+    
+    # make a sub function
+    main_plt_df <- df_exp_spec_noise_rec_fs %>%
+      dplyr::filter(reduce(map(
+        frac_reserves, near, x = reserve_frac, tol = 1e-4
+      ), `|`)) %>%
+      dplyr::group_by(reserve_frac, flep_ratio, f_fmsy, year) %>%
+      dplyr::summarize(annual_yield = sum(yield)) %>%
+      dplyr::ungroup() %>%
+      dplyr::filter(reduce(map(
+        f_fmsys, near, x = f_fmsy, tol = 1e-4
+      ), `|`)) 
+    
+    # make a sub function
+    supp_plt_df <- main_plt_df %>%
+      dplyr::mutate(below_thresh = if_else(annual_yield <= med_yield, 1, 0)) %>%
+      dplyr::group_by(reserve_frac, f_fmsy) %>%
+      dplyr::summarize(
+        mean_yield = round(mean(annual_yield, na.rm = TRUE), 2),
+        mean_yield_lab = paste0("Mean yield: ", mean_yield),
+        sd_yield = round(sd(annual_yield, na.rm = TRUE), 2),
+        sd_yield_lab = paste0("SD yield: ", sd_yield),
+        cv_yield = round(sd(annual_yield, na.rm = TRUE)/mean(annual_yield, na.rm = TRUE), 2),
+        cv_yield_lab = paste0("CV yield: ", cv_yield),
+        yrs_below_thresh = paste("% YR below thresh: ", round(sum(below_thresh)/135, 2))
+      )
+    return(list(main_plt_df, supp_plt_df, med_yield))
+  }
+
+
+prep_ann_abund_for_plot <- function(df_exp_spec_noise_rec_fs,
+                                    frac_reserves = c(0, 0.25, 0.50),
+                                    f_fmsys = c(0.52, 1.00, 2.09)) {
+  
+        
+  if (length(f_fmsys) < 1 | is.null(f_fmsys)) {
+    stop("Please specify f_fmsy values to use")
+  }
+  
+  if (length(frac_reserves) < 1 | is.null(frac_reserves)) {
+    stop("Please specify frac_reserves values to use")
+  }
+  
+  # make a sub function
+    med_biomass <- df_exp_spec_noise_rec_fs %>%
+      dplyr::filter(near(f_fmsy, 1), near(reserve_frac, 0))  %>%
+      dplyr::group_by(
+        experiment,
+        noise,
+        species,
+        bh_alpha,
+        rec_sd,
+        reserve_frac,
+        flep_ratio,
+        sim_num,
+        year
+      ) %>%
+      dplyr::summarise(ann_biomass = sum(biomass_at_age)) %>%
+      dplyr::ungroup() %>%
+      dplyr::summarise(med_biomass_f_fmsy = median(ann_biomass)) %>%
+      .$med_biomass_f_fmsy
+    
+    # make a sub function
+    main_plt_df <- df_exp_spec_noise_rec_fs %>%
+      dplyr::filter(reduce(map(
+        frac_reserves, near, x = reserve_frac, tol = 1e-4
+      ), `|`)) %>%
+      dplyr::group_by(reserve_frac, flep_ratio, f_fmsy, year) %>%
+      dplyr::summarize(annual_biomass = sum(biomass_at_age)) %>%
+      dplyr::ungroup() %>%
+      dplyr::filter(reduce(map(
+        f_fmsys, near, x = f_fmsy, tol = 1e-4
+      ), `|`)) 
+    
+    # make a sub function
+    supp_plt_df <- main_plt_df %>%
+      dplyr::mutate(below_thresh = if_else(annual_biomass <= med_biomass, 1, 0)) %>%
+      dplyr::group_by(reserve_frac, f_fmsy) %>%
+      dplyr::summarize(
+        mean_biomass = round(mean(annual_biomass, na.rm = TRUE), 2),
+        mean_biomass_lab = paste0("Mean biomass: ", mean_biomass),
+        sd_biomass = round(sd(annual_biomass, na.rm = TRUE), 2),
+        sd_biomass_lab = paste0("SD biomass: ", sd_biomass),
+        cv_biomass = round(sd(annual_biomass, na.rm = TRUE)/mean(annual_biomass, na.rm = TRUE), 2),
+        cv_biomass_lab = paste0("CV yield: ", cv_biomass),
+        yrs_below_thresh = paste("YR below thresh: ", sum(below_thresh))
+      )
+    return(list(main_plt_df, supp_plt_df, med_biomass))
+  }
+
+
+facet_yield_ts_plots <- function(main_plt_df,
+                                 sub_plt_df,
+                                 yield_thresh,
+                                 text = TRUE,
+                                 exp_deets_df,
+                                 x_min = 600,
+                                 x_max = 635,
+                                 x_text_val = (x_max) - (x_max - x_min)/2) {
+
+  plt_species <- unique(exp_deets_df$species)
+  plt_dispersal <- unique(exp_deets_df$experiment)
+  plt_noise <- unique(exp_deets_df$noise)
+  plt_alpha <- round(unique(exp_deets_df$bh_alpha), 3)
+  plt_sd <- unique(exp_deets_df$rec_sd)
+  
+  title_string <- paste0("Simulation results for: ", plt_species, 
+                         " with ", plt_dispersal, " and ", plt_noise, " noise. \n", 
+                         # "Pop dy parms: \n- BH alpha = ", plt_alpha, 
+                         "\n- noise sd = ", plt_sd)
+  
+  quants_df <- main_plt_df %>%
+    dplyr::group_by(reserve_frac, f_fmsy) %>%
+    summarize(quant_80 = quantile(annual_yield, 0.8), 
+              quant_20 = quantile(annual_yield, 0.2))
+  
+  
+  
+  ggplot(main_plt_df, aes(x = year, y = annual_yield)) +
+    facet_grid(reserve_frac ~ f_fmsy,
+               labeller = labeller(f_fmsy = label_both,
+                                   reserve_frac = label_both)) +
+    geom_ribbon(aes(
+      ymin = yield_thresh,
+      ymax = pmin(annual_yield, yield_thresh),
+      fill = "Yield lower"
+    )) +
+    geom_ribbon(aes(
+      ymin = annual_yield,
+      ymax = pmin(annual_yield, yield_thresh),
+      fill = "Yield higher"
+    )) +
+    scale_fill_manual(values = c("black", "white")) +
+    {if (text) geom_text(
+      data = sub_plt_df,
+      x = x_text_val,
+      y = 9500,
+      size = 2.5,
+      aes(label = mean_yield_lab)
+    )} +
+    {if (text) geom_text(
+      data = sub_plt_df,
+      x = x_text_val,
+      y = 11500,
+      size = 2.5,
+      aes(label = sd_yield_lab)
+    )} +
+    {if (text) geom_text(
+      data = sub_plt_df,
+      x = x_text_val,
+      y = 12500,
+      size = 2.5,
+      aes(label = yrs_below_thresh)
+    )} +
+    {if (text) geom_text(
+      data = sub_plt_df,
+      x = x_text_val,
+      y = 10500,
+      size = 2.5,
+      aes(label = cv_yield_lab)
+    )} +
+    labs(fill = "Above/Below Yield threshold") +
+    ggtitle(title_string) +
+    xlab("Year") +
+    ylab("Yield (metric tons)") +
+    # ylim(0, 15000) +
+    ylim(0, 12500) +
+    xlim(x_min, x_max) +
+    labs(colour = "Reserve\nfraction") +
+    theme_grey() +
+    geom_hline(data = quants_df, aes(yintercept = quant_80), colour = "orange", linewidth = 1.1, linetype = 1) +
+    geom_hline(data = quants_df, aes(yintercept = quant_20), colour = "orange", linewidth = 1.1, linetype = 1) +
+    theme(
+      axis.line = element_line(colour = "black"),
+      panel.background = element_rect(fill = "grey60"),
+      panel.grid.major = element_blank(),
+      panel.grid.minor = element_blank(),
+      panel.border = element_blank(),
+      legend.position="none"
+    )
+}
+
+facet_biomass_ys_plots <- function(main_plt_df,
+                                 sub_plt_df,
+                                 biomass_thresh,
+                                 exp_deets_df,
+                                 x_text_val = 550) {
+
+  plt_species <- unique(exp_deets_df$species)
+  plt_dispersal <- unique(exp_deets_df$experiment)
+  plt_noise <- unique(exp_deets_df$noise)
+  plt_alpha <- round(unique(exp_deets_df$bh_alpha), 3)
+  plt_sd <- unique(exp_deets_df$rec_sd)
+  
+  title_string <- paste0("Simulation results for: ", plt_species, 
+                         " with ", plt_dispersal, " and ", plt_noise, " noise. \n", 
+                         # "Pop dy parms: \n- BH alpha = ", plt_alpha, 
+                         "\n- noise sd = ", plt_sd)
+  
+  quants_df <- main_plt_df %>%
+    dplyr::group_by(reserve_frac, f_fmsy) %>%
+    summarize(quant_80 = quantile(annual_biomass, 0.8),
+              quant_20 = quantile(annual_biomass, 0.2))
+  
+  ggplot(main_plt_df, aes(x = year, y = annual_biomass)) +
+    facet_grid(reserve_frac ~ f_fmsy,
+               labeller = labeller(f_fmsy = label_both,
+                                   reserve_frac = label_both)) +
+    geom_ribbon(aes(
+      ymin = biomass_thresh,
+      ymax = pmin(annual_biomass, biomass_thresh),
+      fill = "Yield lower"
+    )) +
+    geom_ribbon(aes(
+      ymin = annual_biomass,
+      ymax = pmin(annual_biomass, biomass_thresh),
+      fill = "Yield higher"
+    )) +
+    scale_fill_manual(values = c("black", "white")) +
+    # geom_text(
+    #   data = sub_plt_df,
+    #   x = x_text_val,
+    #   y = 11000,
+    #   aes(label = mean_biomass_lab)
+    # ) +
+    # geom_text(
+    #   data = sub_plt_df,
+    #   x = x_text_val,
+    #   y = 12500,
+    #   aes(label = sd_biomass_lab)
+    # ) +
+    # geom_text(
+    #   data = sub_plt_df,
+    #   x = x_text_val,
+    #   y = 14000,
+    #   aes(label = yrs_below_thresh)
+    # ) +
+    # geom_text(
+    #   data = sub_plt_df,
+    #   x = x_text_val,
+    #   y = 9500,
+    #   aes(label = cv_biomass_lab)
+    # ) +
+    labs(fill = "Above/Below Biomass threshold") +
+    ggtitle(title_string) +
+    xlab("Year") +
+    ylab("Biomass (metric tons)") +
+    ylim(0, NA) +
+    labs(colour = "Reserve\nfraction") +
+    theme_grey() +
+    geom_hline(data = quants_df, aes(yintercept = quant_80), colour = "orange", linewidth = 1.1, linetype = 1) +
+    geom_hline(data = quants_df, aes(yintercept = quant_20), colour = "orange", linewidth = 1.1, linetype = 1) +
+    theme(
+      axis.line = element_line(colour = "black"),
+      panel.background = element_rect(fill = "grey60"),
+      panel.grid.major = element_blank(),
+      panel.grid.minor = element_blank(),
+      panel.border = element_blank()
+    )
+}
+
+# Recruits TS above/below thresh time series
+
+# Recruit time series
+prep_ann_recs_for_plot <- function(df_exp_spec_noise_rec_fs,
+                                   fleps_2_fs,
+                                   f_maxes_yield,
+                                   frac_reserves = c(0, 0.25, 0.50),
+                                   f_fmsys = c(0, 0.52, 1.00, 1,43, 2.09),
+                                   sp_parms,
+                                   spc) {
+  if (length(f_fmsys) < 1 | is.null(f_fmsys)) {
+    stop("Please specify f_fmsy values to use")
+  }
+  
+  if (length(frac_reserves) < 1 | is.null(frac_reserves)) {
+    stop("Please specify frac_reserves values to use")
+  }
+  
+  t_c <- sp_parms[which(sp_parms$species == spc), ]$A_fish
+  
+  main_plt_df <- df_exp_spec_noise_rec_fs |>
+    left_join(., y = fleps_2_fs, by = join_by(flep_ratio == flep_vals)) |>
+    dplyr::mutate(f_fmsy = round(f_vals / f_maxes_yield, 2)) |>
+    dplyr::filter(reduce(map(
+      frac_reserves, near, x = reserve_frac, tol = 1e-4
+    ), `|`),
+    reduce(map(
+      f_fmsys, near, x = f_fmsy, tol = 1e-4
+    ), `|`))
+  
+  
+  # make a sub function
+  recruit_thresh <- main_plt_df %>%
+    dplyr::filter(near(f_fmsy, 1), near(reserve_frac, 0)) %>%
+    dplyr::summarize(med_recs_f_fmsy = median(recruits)) %>%
+    .$med_recs_f_fmsy
+  
+  
+  supp_plt_df <- main_plt_df %>%
+  dplyr::filter(year > 500) %>%
+  dplyr::mutate(below_thresh = if_else(recruits <= recruit_thresh, 1, 0)) %>%
+  dplyr::group_by(reserve_frac, f_fmsy) |>
+      dplyr::summarize(
+        mean_recruits = round(mean(recruits, na.rm = TRUE), 2),
+        sd_recruits = round(sd(recruits, na.rm = TRUE), 2),
+        cv_recruits = round(sd_recruits/mean_recruits, 2),
+        yrs_below_thresh = paste("YR below thresh: ", sum(below_thresh))
+      ) |>
+        dplyr::ungroup() |>
+        dplyr::mutate(mean_recruits_lab = paste0("Mean recruits: ", format(mean_recruits, 
+                                                             big.mark = ",",
+                                                             scientific = FALSE)),
+                      sd_recruits_lab = paste0("SD recruits: ", format(sd_recruits, 
+                                                             big.mark = ",",
+                                                             scientific = FALSE)),
+                      cv_recruits_lab = paste0("CV recruits: ", format(cv_recruits, 
+                                                             big.mark = ",",
+                                                             scientific = FALSE)))
+  return(list(main_plt_df, supp_plt_df, recruit_thresh))
+}
+
+facet_recs_ts_plots <- function(main_plt_df,
+                                sub_plt_df,
+                                yield_sub_plt,
+                                recruit_thresh,
+                                exp_deets_df,
+                                x_text_val = 550) {
+  ggplot(data = main_plt_df |> filter(year > 500),
+       aes(x = year, y = recruits)) +
+  geom_ribbon(aes(
+      ymin = recruit_thresh,
+      ymax = pmin(recruits, recruit_thresh),
+      fill = "Recruits lower"
+    )) +
+    geom_ribbon(aes(
+      ymin = recruits,
+      ymax = pmin(recruits, recruit_thresh),
+      fill = "Recruits higher"
+    )) +
+    scale_fill_manual(values = c("black", "white")) +
+  facet_grid(reserve_frac ~ f_fmsy,
+             labeller = labeller(f_fmsy = label_both,
+                                 reserve_frac = label_both)) +
+      geom_text(
+      data = sub_plt_df,
+      x = x_text_val,
+      y = 4E6,
+      aes(label = mean_recruits_lab),
+      size = 3
+    ) +
+    geom_text(
+      data = sub_plt_df,
+      x = x_text_val,
+      y = 4.5E6,
+      aes(label = sd_recruits_lab),
+      size = 3
+    ) +
+    geom_text(
+      data = sub_plt_df,
+      x = x_text_val,
+      y = 5E6,
+      aes(label = yrs_below_thresh),
+      size = 3
+    ) +
+    geom_text(
+      data = sub_plt_df,
+      x = x_text_val,
+      y = 3.5E6,
+      aes(label = cv_recruits_lab),
+      size = 3
+    ) + 
+    geom_text(
+      data = yield_sub_plt,
+      x = x_text_val,
+      y = 5.5E6,
+      aes(label = mean_yield_lab),
+      size = 3
+    ) +
+    labs(fill = "Above/Below Recruit threshold") +
+    ylim(0, 7e6) +
+  theme_grey()  +
+  theme(
+    axis.line = element_line(colour = "black"),
+    panel.background = element_rect(fill = "grey60"),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    panel.border = element_blank()
+  ) +
+  ylab("Recruits") +
+  xlab("Year")
+       
+}
+
+
+# Contour plot functions: yield
+
+get_sp_disp_noise_yield_gcols <- function(sp_disp_noise_yield_prep) {
+  sp_disp_noise_yield_prep_gcols <- sp_disp_noise_yield_prep %>%
+    select(all_of(
+      c(
+        "reserve_frac",
+        "flep_ratio",
+        "f_vals",
+        "f_fmsy",
+        "year",
+        "age",
+        "yield"
+      )
+    ))
+
+  return(sp_disp_noise_yield_prep_gcols)
+}
+
+get_sp_disp_noise_abund_gcols <- function(sp_disp_noise_abund_prep) {
+  sp_disp_noise_abund_prep_gcols <- sp_disp_noise_abund_prep %>%
+    select(all_of(
+      c(
+        "reserve_frac",
+        "flep_ratio",
+        "f_vals",
+        "f_fmsy",
+        "year",
+        "age",
+        "biomass_at_age"
+      )
+    ))
+
+  return(sp_disp_noise_abund_prep_gcols)
+}
+
+calc_sp_disp_noise_gcols_ann_yield <- function(sp_disp_noise_yield_prep_gcols) {
+  sp_disp_noise_yield_gcols_ann_yield <- sp_disp_noise_yield_prep_gcols %>%
+  group_by(reserve_frac, f_vals, f_fmsy, year) %>%
+  summarise(ann_yield = sum(yield)) %>%
+  ungroup() 
+  return(sp_disp_noise_yield_gcols_ann_yield)
+}
+
+calc_sp_disp_noise_gcols_ann_abund <- function(sp_disp_noise_abund_prep_gcols) {
+  sp_disp_noise_abund_gcols_ann<- sp_disp_noise_abund_prep_gcols %>%
+  group_by(reserve_frac, f_vals, f_fmsy, year) %>%
+  summarise(ann_biomass = sum(biomass_at_age)) %>%
+  ungroup() 
+  return(sp_disp_noise_abund_gcols_ann)
+}
+
+calc_sp_disp_noise_yield_gcols_med_ann_yield <- function(sp_disp_noise_yield_prep_gcols) {
+  sp_disp_noise_yield_gcols_med_ann_yield <- sp_disp_noise_yield_prep_gcols %>%
+  group_by(reserve_frac, f_vals, f_fmsy, year) %>%
+  summarise(ann_yield = sum(yield)) %>%
+  ungroup() %>%
+  group_by(reserve_frac, f_vals,  f_fmsy) %>%
+  summarise(median_ann_yield = median(ann_yield)) %>%
+  ungroup()
+  return(sp_disp_noise_yield_gcols_med_ann_yield)
+}
+
+calc_sp_disp_noise_abund_gcols_med_ann_abund <- function(sp_disp_noise_abund_prep_gcols) {
+  sp_disp_noise_abund_gcols_med_ann_abund <- sp_disp_noise_abund_prep_gcols %>%
+  group_by(reserve_frac, f_vals, f_fmsy, year) %>%
+  summarise(ann_biomass = sum(biomass_at_age)) %>%
+  ungroup() %>%
+  group_by(reserve_frac, f_vals,  f_fmsy) %>%
+  summarise(median_ann_biomass = median(ann_biomass)) %>%
+  ungroup()
+  return(sp_disp_noise_abund_gcols_med_ann_abund)
+}
+
+get_f_maxes_med_ann_yield <- function(sp_disp_noise_yield_gcols_med_ann_yield) {
+  f_max_median_ann_yield <- sp_disp_noise_yield_gcols_med_ann_yield %>%
+  filter(median_ann_yield == max(median_ann_yield)) %>%
+  .$f_vals
+  
+  try(if(length(f_max_median_ann_yield) == 0) stop("no F that maxes yield was found"))
+  
+  if (length(f_max_median_ann_yield) > 1) {
+    
+    return(f_max_median_ann_yield[1]) 
+  } 
+  
+  return(f_max_median_ann_yield)
+}
+
+calc_sp_disp_noise_yield_gcols_ann_yield_ffmsy <- function(sp_disp_noise_yield_gcols_ann_yield, 
+                                                      f_max_median_ann_yield) {
+  
+  sp_disp_noise_yield_gcols_ann_yield_ffmsy <- sp_disp_noise_yield_gcols_ann_yield %>%
+    mutate(f_fmsy = f_vals / f_max_median_ann_yield)
+  
+  return(sp_disp_noise_yield_gcols_ann_yield_ffmsy)
+}
+
+calc_sp_disp_noise_abund_gcols_ann_abund_ffmsy <- function(sp_disp_noise_abund_gcols_ann_abund, 
+                                                      f_max_median_ann_yield) {
+  
+  sp_disp_noise_abund_gcols_ann_abund_ffmsy <- sp_disp_noise_abund_gcols_ann_abund %>%
+    mutate(f_fmsy = f_vals / f_max_median_ann_yield)
+  
+  return(sp_disp_noise_abund_gcols_ann_abund_ffmsy)
+}
+
+calc_sp_disp_noise_yield_frac_below_med_max_yield <- function(sp_disp_noise_yield_gcols_ann_yield_ffmsy,
+                                                              max_median_ann_yield) {
+  
+  # if (is.na(max_median_ann_yield)) {
+  #   max_median_ann_yield <- sp_disp_noise_yield_gcols_ann_yield_ffmsy %>% 
+  #   group_by(reserve_frac, f_vals, f_fmsy) %>%
+  #   summarise(median_ann_yield = median(ann_yield)) %>%
+  #   ungroup() %>%
+  #   filter(median_ann_yield == max(median_ann_yield)) %>% 
+  #   .$median_ann_yield
+  # }
+
+  sp_disp_noise_yield_frac_below_med_max_yield <-
+      sp_disp_noise_yield_gcols_ann_yield_ffmsy %>%
+      mutate(below_yield_thresh = if_else(ann_yield < max_median_ann_yield, 1, 0)) %>%
+      group_by(reserve_frac, f_fmsy) %>%
+      summarise(n_yrs_below = sum(below_yield_thresh)) %>%
+      ungroup() %>%
+      mutate(frac_below_med_yield_f_max = round(n_yrs_below / sim_len, 3))
+    return(sp_disp_noise_yield_frac_below_med_max_yield)
+}
+
+
+calc_sp_disp_noise_abund_frac_below_med_max_abund <- function(sp_disp_noise_abund_gcols_ann_abund_ffmsy,
+                                                              max_median_ann_abund) {
+  
+  # if (is.na(max_median_ann_abund)) {
+  #   max_median_ann_abund <- sp_disp_noise_abund_gcols_ann_abund_ffmsy %>% 
+  #   group_by(reserve_frac, f_vals, f_fmsy) %>%
+  #   summarise(median_ann_biomass = median(ann_biomass)) %>%
+  #   ungroup() %>%
+  #   filter(median_ann_biomass == max(median_ann_biomass)) %>% 
+  #   .$median_ann_biomass
+  # }
+
+  sp_disp_noise_abund_frac_below_med_max_abund <-
+      sp_disp_noise_abund_gcols_ann_abund_ffmsy %>%
+      mutate(below_thresh_ann_yield = if_else(ann_biomass < max_median_ann_abund, 1, 0)) %>%
+      group_by(reserve_frac, f_fmsy) %>%
+      summarise(n_yrs_below = sum(below_thresh_ann_yield)) %>%
+      ungroup() %>%
+      mutate(frac_below_med_abund_f_max = round(n_yrs_below / sim_len, 3))
+    return(sp_disp_noise_abund_frac_below_med_max_abund)
+}
+
+
+make_contour_plt_sp_disp_noise_frac_below_med_max_yield <-
+  function(sp_disp_noise_yield_frac_below_med_max_yield,
+           species_name,
+           dispersal,
+           noise_type,
+           max_f_fmsy,
+           max_reserve_frac) {
+    sp_disp_noise_yield_frac_below_med_max_yield_plt <-
+      sp_disp_noise_yield_frac_below_med_max_yield %>%
+      filter(reserve_frac <= max_reserve_frac, f_fmsy <= max_f_fmsy) %>%
+      ggplot(data = .,
+             aes(x = reserve_frac, y = f_fmsy, z = frac_below_med_yield_f_max)) +
+      geom_contour_filled(bins = 12) +
+      ggtitle(paste0(
+        species_name,
+        " ",
+        dispersal,
+        " ",
+        noise_type,
+        ":\nTime below median max yield"
+      )) +
+      xlab("Reserve fraction") +
+      ylab("F/Fmsy") +
+      scale_fill_viridis_d(option = "D", direction = -1) +
+      geom_segment(aes(
+        x = 0,
+        xend = max_reserve_frac,
+        y = 1,
+        yend = 1
+      ), colour = "black",
+      linetype = 2) +
+      scale_x_continuous(expand = expansion(mult = 0, add = 0)) +
+      scale_y_continuous(expand = expansion(mult = 0, add = 0)) +
+      theme_bw()
+    
+    return(sp_disp_noise_yield_frac_below_med_max_yield_plt)
+  }
+
+make_contour_plt_sp_disp_noise_frac_below_med_max_abund <-
+  function(sp_disp_noise_frac_below_med_max_abund,
+           species_name,
+           dispersal,
+           noise_type,
+           max_f_fmsy,
+           max_reserve_frac) {
+    sp_disp_noise_frac_below_med_max_abund_plt <-
+      sp_disp_noise_frac_below_med_max_abund %>%
+      filter(reserve_frac <= max_reserve_frac, f_fmsy <= max_f_fmsy) %>%
+      ggplot(data = .,
+             aes(x = reserve_frac, y = f_fmsy, z = frac_below_med_abund_f_max)) +
+      geom_contour_filled(bins = 12) +
+      ggtitle(
+        paste0(
+          species_name,
+          " ",
+          dispersal,
+          " ",
+          noise_type,
+          ":\nTime below median max biomass"
+        )
+      ) +
+      xlab("Reserve fraction") +
+      ylab("F/Fmsy") +
+      scale_fill_viridis_d(option = "D", direction = -1) +
+      geom_segment(
+        aes(
+          x = 0,
+          xend = max_reserve_frac,
+          y = 1,
+          yend = 1
+        ),
+        colour = "black",
+        linetype = 2
+      ) +
+      scale_x_continuous(expand = expansion(mult = 0, add = 0)) +
+      scale_y_continuous(expand = expansion(mult = 0, add = 0)) +
+      theme_bw()
+    
+    return(sp_disp_noise_frac_below_med_max_abund_plt)
+}
+
+# Contour plot functions: recruits
+
+calc_sp_disp_noise_recs_ffmsy <- function(sp_disp_noise_recs, 
+                                          fleps_2_fs,
+                                          f_maxes_med_ann_yield) {
+  sp_disp_noise_recs_ffmsy <- sp_disp_noise_recs %>%
+    mutate(flep_ratio_ch = as.character(flep_ratio)) %>%
+    left_join(., y = fleps_2_fs, by = join_by(flep_ratio_ch == flep_vals_ch)) %>%
+    dplyr::mutate(f_fmsy = round(f_vals / f_maxes_med_ann_yield, 2))
+  return(sp_disp_noise_recs_ffmsy)
+}
+
+calc_recruit_thresh <- function(sp_disp_noise_recs_ffmsy) {
+  recruit_thresh <- sp_disp_noise_recs_ffmsy %>%
+  dplyr::filter(near(f_fmsy, 1), near(reserve_frac, 0)) %>%
+  dplyr::summarize(med_recs_f_fmsy = median(recruits)) %>%
+  .$med_recs_f_fmsy
+  return(recruit_thresh)
+}
+
+calc_time_below_rec_thresh <- function(sp_disp_noise_recs_ffmsy, 
+                                       recruit_thresh) {
+  sp_disp_noise_recs_ffmsy %>%
+  arrange(reserve_frac, f_fmsy, year) %>%
+  mutate(below_threshold = recruits <= recruit_thresh) %>%
+  group_by(reserve_frac, f_fmsy) %>%
+  summarize(num_below_threshold = sum(below_threshold), 
+            frac_below_threshold = num_below_threshold/sim_len)
+}
+
+make_contour_sp_disp_noise_frac_below_rec_thresh <-
+  function(sp_disp_noise_recs_below_thresh,
+           species_name,
+           dispersal,
+           noise_type,
+           max_f_fmsy = 2.5 ,
+           max_reserve_frac = 0.5,
+           n_bins = 12) {
+    
+    recs_below_threshold_plt <- sp_disp_noise_recs_below_thresh %>%
+      filter(reserve_frac <= max_reserve_frac, f_fmsy <= max_f_fmsy) %>%
+      ggplot(data = .,
+             aes(x = reserve_frac, y = f_fmsy, z = frac_below_threshold)) +
+      geom_contour_filled(bins = n_bins) +
+      ggtitle(paste0(
+        species_name,
+        " ",
+        dispersal,
+        " ",
+        noise_type,
+        ":\nTime below threshold"
+      )) +
+      xlab("Reserve fraction") +
+      ylab("F/Fmsy") +
+      scale_fill_viridis_d(option = "D", direction = -1) +
+      geom_segment(aes(
+        x = 0,
+        xend = max_reserve_frac,
+        y = 1,
+        yend = 1
+      ),
+      colour = "black",
+      linetype = 2) +
+      scale_x_continuous(expand = expansion(mult = 0, add = 0)) +
+      scale_y_continuous(expand = expansion(mult = 0, add = 0))
+    
+    return(recs_below_threshold_plt)
+    
+  }
+
+```
+
+```{r}
+#| label: recs-abund-yield
+#| echo: FALSE
+
+recs_spec_disp_noise <- qry_results_table_agg(
+  ddb_table = exp, #"larval_pool_blue_rockfish_mei_135_75",
+  metric = "recruits",
+  burn_in = burn_in_parm,
+  sim_len = sim_len_parm,
+  reserve_fracs = NULL,
+  flep_ratios = NULL) %>%
+  mutate(flep_ratio_ch = as.character(flep_ratio))
+
+waa_df <- tibble(age = 1:length(waa_g),
+                 "waa" = waa_g)
+
+abund_spec_disp_noise <- qry_results_table_agg(
+  ddb_table = exp, #"larval_pool_blue_rockfish_mei_135_75",
+  metric = "abundance",
+  burn_in = burn_in_parm,
+  sim_len = sim_len_parm,
+  reserve_fracs = NULL,
+  flep_ratios = NULL) %>%
+  tibble() %>%
+  left_join(x = ., y = waa_df, by = "age") %>%
+  mutate(biomass_at_age = (abundance * waa) / 1e6,
+         flep_ratio_ch = as.character(flep_ratio)) %>%
+  select(-waa, -abundance)
+
+yield_spec_disp_noise <- qry_results_table_agg(
+  ddb_table = exp, #"larval_pool_blue_rockfish_mei_135_75",
+  metric = "yield",
+  burn_in = burn_in_parm,
+  sim_len = sim_len_parm,
+  reserve_fracs = NULL,
+  flep_ratios = NULL) %>% 
+  mutate(yield = yield / 1e6, 
+         flep_ratio_ch = as.character(flep_ratio))
+
+```
+
+## Recruits
+
+#### Time series plots
+
+```{r}
+#| label: recruit-time-series-plots
+#| echo: FALSE
+#| fig-width: 15
+#| fig-height: 8
+#| fig-column: screen
+
+F_max_yield <-
+  get_f_maxes_yield(yield_disp_sp_noise = yield_spec_disp_noise,
+                    fleps_2_fs = spec_fleps_2_fs)
+
+# yield_brf_lp_white_135_75_prep
+
+yield_spec_disp_noise_prep <- make_df_yield_exp_spec_noise_rec_fs(
+  df_exp_spec_noise_rec = yield_spec_disp_noise,
+  fleps_2_fs = spec_fleps_2_fs,
+  f_maxes_yield = F_max_yield
+)
+
+yield_sub_plt_df <- prep_ann_yield_for_plot(
+  df_exp_spec_noise_rec = yield_spec_disp_noise_prep,
+  frac_reserves = c(0, 0.25, 0.50),
+  f_fmsys = c(0, 0.52, 1.00, 1.43, 2.09)
+)[[2]]
+
+
+recs_spec_disp_noise_plt <-
+  prep_ann_recs_for_plot(
+    df_exp_spec_noise_rec_fs = recs_spec_disp_noise,
+    fleps_2_fs = spec_fleps_2_fs,
+    f_maxes_yield = F_max_yield,
+    frac_reserves = c(0, 0.25, 0.50),
+    f_fmsys = c(0, 0.52, 1.00, 1.43, 2.09),
+    sp_parms = species_parms,
+    spc = nice_species
+  )
+
+spec_disp_noise_135_075_alpha_sd <-
+  get_exp_details(df_after_qry_results_table_agg = recs_spec_disp_noise)
+
+
+recs_ts_plt <- facet_recs_ts_plots(
+  main_plt_df = recs_spec_disp_noise_plt[[1]],
+  sub_plt_df = recs_spec_disp_noise_plt[[2]],
+  yield_sub_plt = yield_sub_plt_df,
+  recruit_thresh = recs_spec_disp_noise_plt[[3]],
+  exp_deets_df = spec_disp_noise_135_075_alpha_sd,
+  x_text_val = 550
+)
+
+print(recs_ts_plt)
+
+postscript(file = file.path(out_path, paste0(exp, "-recs-ts-plt.eps")), 
+           width = 8,
+           heigh = 6)
+print(recs_ts_plt)
+invisible(dev.off())
+
+png(
+  file = file.path(out_path, paste0(exp, "-recs-ts-plt.png")),
+  width = 8,
+  heigh = 6,
+  units = "in", res = 600
+)
+print(recs_ts_plt)
+invisible(dev.off())
+
+```
+
+#### Contour plots
+
+```{r}
+#| label: recruit-contour-plots
+#| echo: FALSE
+#| fig-width: 15
+#| fig-height: 8
+#| fig-column: screen
+
+# yield_spec_disp_noise_prep
+yield_spec_disp_noise_prep_gcols <- get_sp_disp_noise_yield_gcols(sp_disp_noise_yield_prep = yield_spec_disp_noise_prep)
+
+yield_spec_disp_noise_gcols_ann <- 
+calc_sp_disp_noise_gcols_ann_yield(sp_disp_noise_yield_prep_gcols = yield_spec_disp_noise_prep_gcols)
+
+yield_spec_disp_noise_gcols_med_ann <- calc_sp_disp_noise_yield_gcols_med_ann_yield(sp_disp_noise_yield_prep_gcols = yield_spec_disp_noise_prep_gcols)
+
+# spec_disp_noise_f_maxes_med_ann_yield <- get_f_maxes_med_ann_yield(sp_disp_noise_yield_gcols_med_ann_yield = yield_spec_disp_noise_gcols_med_ann)
+
+recs_spec_disp_noise_ffmsy <-
+  calc_sp_disp_noise_recs_ffmsy(sp_disp_noise_recs = recs_spec_disp_noise,
+                                fleps_2_fs = spec_fleps_2_fs,
+                                f_maxes_med_ann_yield = F_max_yield)
+
+recs_spec_disp_rec_thresh <- calc_recruit_thresh(sp_disp_noise_recs_ffmsy = recs_spec_disp_noise_ffmsy)
+
+recs_spec_disp_noise_below_thresh <-
+  calc_time_below_rec_thresh(sp_disp_noise_recs_ffmsy = recs_spec_disp_noise_ffmsy,
+                             recruit_thresh = recs_spec_disp_rec_thresh) 
+
+rec_contour_plt <- make_contour_sp_disp_noise_frac_below_rec_thresh(
+  sp_disp_noise_recs_below_thresh = recs_spec_disp_noise_below_thresh,
+  species_name = nice_species,
+  dispersal = nice_dispersal,
+  noise_type = nice_noise,
+  max_f_fmsy = 2.5,
+  max_reserve_frac = 0.5,
+  n_bins = 12
+)
+
+print(rec_contour_plt)
+
+postscript(file = file.path(out_path, paste0(exp, "-recs-contour-plt.eps")), 
+           width = 8,
+           heigh = 6)
+print(rec_contour_plt)
+invisible(dev.off())
+
+png(
+  file = file.path(out_path, paste0(exp, "-recs-contour-plt.png")),
+  width = 8,
+  heigh = 6,
+  units = "in", res = 600
+)
+print(rec_contour_plt)
+invisible(dev.off())
+
+```
+
+## Abundance
+
+#### Time series plots
+
+```{r}
+#| label: abundance-time-series-plots
+#| echo: FALSE
+#| fig-width: 15
+#| fig-height: 8
+#| fig-column: screen
+# Needs
+# 1. abund_spec_disp_noise
+# 2. (brf_)F_max_yield(_75sd)
+
+# abund_spec_disp_noise
+# F_max_yield
+
+abund_spec_disp_noise_alpha_sd <- get_exp_details(df_after_qry_results_table_agg= abund_spec_disp_noise)
+
+abund_spec_disp_noise_prep <- make_df_exp_spec_noise_rec_fs(
+  df_exp_spec_noise_rec = abund_spec_disp_noise,
+  fleps_2_fs = spec_fleps_2_fs,
+  f_maxes_yield = F_max_yield
+)
+
+abund_spec_disp_noise_plt <-
+  prep_ann_abund_for_plot(
+    df_exp_spec_noise_rec = abund_spec_disp_noise_prep,
+    frac_reserves = c(0, 0.25, 0.50),
+    f_fmsys = c(0.52, 1.00, 1.43, 2.09)
+  )
+
+ 
+abund_ts_plt <- facet_biomass_ys_plots(main_plt_df = abund_spec_disp_noise_plt[[1]],
+                     sub_plt_df = abund_spec_disp_noise_plt[[2]],
+                     biomass_thresh = abund_spec_disp_noise_plt[[3]],
+                     exp_deets_df = abund_spec_disp_noise_alpha_sd,
+                     x_text_val = x_text_position_parm) 
+
+print(abund_ts_plt)
+
+postscript(file = file.path(out_path, paste0(exp, "-abund-ts-plt.eps")), 
+           width = 8,
+           heigh = 6)
+print(abund_ts_plt)
+invisible(dev.off())
+
+png(
+  file = file.path(out_path, paste0(exp, "-abund-ts-plt.png")),
+  width = 8,
+  heigh = 6,
+  units = "in", res = 600
+)
+print(abund_ts_plt)
+invisible(dev.off())
+
+
+```
+
+#### Contour plots
+
+```{r}
+#| label: abundance-contour-plots
+#| echo: FALSE
+#| fig-width: 15
+#| fig-height: 8
+#| fig-column: screen
+
+abund_spec_disp_noise_prep_gcols <- get_sp_disp_noise_abund_gcols(sp_disp_noise_abund_prep = abund_spec_disp_noise_prep)
+
+abund_spec_disp_noise_prep_gcols_ann <- 
+calc_sp_disp_noise_gcols_ann_abund(sp_disp_noise_abund_prep_gcols = abund_spec_disp_noise_prep_gcols)
+
+abund_spec_disp_noise_prep_gcols_med_ann <- calc_sp_disp_noise_abund_gcols_med_ann_abund(sp_disp_noise_abund_prep_gcols = abund_spec_disp_noise_prep_gcols)
+
+spec_disp_noise_ann_abund_ffmsy <- calc_sp_disp_noise_abund_gcols_ann_abund_ffmsy(
+  sp_disp_noise_abund_gcols_ann_abund = abund_spec_disp_noise_prep_gcols_med_ann,
+  f_max_median_ann_yield = F_max_yield
+)
+
+max_median_ann_abund_value <- spec_disp_noise_ann_abund_ffmsy %>% filter(near(f_fmsy, 1)) %>% .$median_ann_biomass
+
+spec_disp_noise_prep_frac_below_med_max_abund <- calc_sp_disp_noise_abund_frac_below_med_max_abund(sp_disp_noise_abund_gcols_ann_abund_ffmsy = abund_spec_disp_noise_prep_gcols_ann, max_median_ann_abund = max_median_ann_abund_value)
+
+spec_disp_noise_prep_abund_contour_plt <- make_contour_plt_sp_disp_noise_frac_below_med_max_abund(
+  sp_disp_noise_frac_below_med_max_abund = spec_disp_noise_prep_frac_below_med_max_abund,
+  species_name = nice_species,
+  dispersal = nice_dispersal,
+  noise_type = nice_noise,
+  max_f_fmsy = 2.5,
+  max_reserve_frac = 0.5
+)
+
+print(spec_disp_noise_prep_abund_contour_plt)
+
+postscript(file = file.path(out_path, paste0(exp, "-abund-contour-plt.eps")), 
+           width = 8,
+           heigh = 6)
+print(spec_disp_noise_prep_abund_contour_plt)
+invisible(dev.off())
+
+png(
+  file = file.path(out_path, paste0(exp, "-abund-contour-plt.png")),
+  width = 8,
+  heigh = 6,
+  units = "in", res = 600
+)
+print(spec_disp_noise_prep_abund_contour_plt)
+invisible(dev.off())
+
+```
+
+## Yield
+
+#### Time series
+
+```{r}
+#| label: yield-time-series-plots
+#| echo: FALSE
+#| fig-width: 15
+#| fig-height: 8
+#| fig-column: screen
+
+# Data input needs:
+# 1. yield_spec_disp_noise
+# 2. F_max_yield
+
+# F_max_yield <-
+#   get_f_maxes_yield(yield_disp_sp_noise = yield_spec_disp_noise,
+#                     fleps_2_fs = spec_fleps_2_fs)
+
+spec_disp_noise_alpha_sd <- get_exp_details(df_after_qry_results_table_agg= yield_spec_disp_noise)
+
+yield_spec_disp_noise_prep <- make_df_exp_spec_noise_rec_fs(
+  df_exp_spec_noise_rec = yield_spec_disp_noise,
+  fleps_2_fs = spec_fleps_2_fs,
+  f_maxes_yield = F_max_yield
+)
+
+yield_spec_disp_noise_plt <-
+  prep_ann_yield_for_plot(
+    df_exp_spec_noise_rec = yield_spec_disp_noise_prep,
+    frac_reserves = c(0, 0.25, 0.50),
+    f_fmsys = c(0.52, 1.00, 1.43, 2.09)
+  )
+
+yield_ts_plots <- facet_yield_ts_plots(main_plt_df = yield_spec_disp_noise_plt[[1]],
+                     sub_plt_df = yield_spec_disp_noise_plt[[2]],
+                     yield_thresh = yield_spec_disp_noise_plt[[3]],
+                     exp_deets_df = spec_disp_noise_alpha_sd,
+                     x_min = 600,
+                     x_max = 635)  
+
+print(yield_ts_plots)
+
+postscript(file = file.path(out_path, paste0(exp, "-yield-ts-plt.eps")), 
+           width = 8,
+           heigh = 6)
+print(yield_ts_plots)
+invisible(dev.off())
+
+png(
+  file = file.path(out_path, paste0(exp, "-yield-ts-plt.png")),
+  width = 8,
+  heigh = 6,
+  units = "in", res = 600
+)
+print(yield_ts_plots)
+invisible(dev.off())
+
+
+# No text version
+yield_ts_plots <- facet_yield_ts_plots(main_plt_df = yield_spec_disp_noise_plt[[1]],
+                     sub_plt_df = yield_spec_disp_noise_plt[[2]],
+                     yield_thresh = yield_spec_disp_noise_plt[[3]],
+                     exp_deets_df = spec_disp_noise_alpha_sd,
+                     text = FALSE,
+                     x_min = 600,
+                     x_max = 635)  
+
+
+
+postscript(file = file.path(out_path, paste0(exp, "-yield-ts-plt-no-text.eps")), 
+           width = 8,
+           heigh = 6)
+print(yield_ts_plots)
+invisible(dev.off())
+
+png(
+  file = file.path(out_path, paste0(exp, "-yield-ts-plt-no-text.png")),
+  width = 8,
+  heigh = 6,
+  units = "in", res = 600
+)
+print(yield_ts_plots)
+invisible(dev.off())
+
+
+```
+
+#### Contour
+
+```{r}
+#| label: yield-contour-plots
+#| echo: FALSE
+#| fig-width: 15
+#| fig-height: 8
+#| fig-column: screen
+
+yield_spec_disp_noise_prep_gcols <- get_sp_disp_noise_yield_gcols(sp_disp_noise_yield_prep = yield_spec_disp_noise_prep)
+
+yield_spec_disp_noise_prep_gcols_ann <- 
+calc_sp_disp_noise_gcols_ann_yield(sp_disp_noise_yield_prep_gcols = yield_spec_disp_noise_prep_gcols)
+
+yield_spec_disp_noise_prep_gcols_med_ann <- calc_sp_disp_noise_yield_gcols_med_ann_yield(sp_disp_noise_yield_prep_gcols = yield_spec_disp_noise_prep_gcols)
+
+spec_disp_noise_ann_yield_ffmsy <- calc_sp_disp_noise_yield_gcols_ann_yield_ffmsy(
+  sp_disp_noise_yield_gcols_ann_yield = yield_spec_disp_noise_prep_gcols_med_ann,
+  f_max_median_ann_yield = F_max_yield) 
+
+spec_disp_noise_prep_frac_below_med_max_yield <- calc_sp_disp_noise_yield_frac_below_med_max_yield(sp_disp_noise_yield_gcols_ann_yield_ffmsy = yield_spec_disp_noise_prep_gcols_ann, max_median_ann_yield = spec_disp_noise_ann_yield_ffmsy %>% filter(near(f_vals, F_max_yield, 0.001), near(reserve_frac, 0, 0.001)) %>% .$median_ann_yield)
+
+spec_disp_noise_prep_yield_contour_plt <- make_contour_plt_sp_disp_noise_frac_below_med_max_yield(
+  sp_disp_noise_yield_frac_below_med_max_yield = spec_disp_noise_prep_frac_below_med_max_yield,
+  species_name = nice_species,
+  dispersal = nice_dispersal,
+  noise_type = nice_noise,
+  max_f_fmsy = 2.5,
+  max_reserve_frac = 0.5
+)
+
+print(spec_disp_noise_prep_yield_contour_plt)
+
+postscript(file = file.path(out_path, paste0(exp, "-yield-contour-plt.eps")), 
+           width = 8,
+           heigh = 6)
+print(spec_disp_noise_prep_yield_contour_plt)
+invisible(dev.off())
+
+png(
+  file = file.path(out_path, paste0(exp, "-yield-contour-plt.png")),
+  width = 8,
+  heigh = 6,
+  units = "in", res = 600
+)
+print(spec_disp_noise_prep_yield_contour_plt)
+invisible(dev.off())
+
+```
+
+## Lagged-recruits ($t_c$) and yield
+
+#### Time series
+
+```{r}
+#| label: lagged-recs-yield-ts-plots
+#| echo: FALSE
+#| fig-width: 15
+#| fig-height: 8
+#| fig-column: screen
+
+# yield_spec_disp_noise_prep_gcols
+# recs_spec_disp_noise_ffmsy
+
+frac_reserves <- c(0, 0.25, 0.50)
+f_fmsys <- c(0.52, 1.00, 2.09)
+
+t_c <- species_parms[which(species_parms$species == nice_species),]$A_fish
+
+
+recs_spec_disp_noise_ffmsy_plt <- recs_spec_disp_noise_ffmsy %>%
+  dplyr::filter(reduce(map(
+    frac_reserves, near, x = reserve_frac, tol = 1e-4
+  ), `|`),
+  reduce(map(
+    f_fmsys, near, x = f_fmsy, tol = 1e-4
+  ), `|`)) %>%
+  mutate(lagged_year = year + t_c) 
+
+yield_spec_disp_noise_prep_plt <- yield_spec_disp_noise_prep_gcols %>%
+  dplyr::group_by(reserve_frac, flep_ratio, f_fmsy, year) %>%
+  dplyr::summarize(annual_yield = sum(yield)) %>%
+  dplyr::ungroup() %>%
+  dplyr::filter(reduce(map(
+    frac_reserves, near, x = reserve_frac, tol = 1e-4
+  ), `|`),
+  reduce(map(
+    f_fmsys, near, x = f_fmsy, tol = 1e-4
+  ), `|`))
+
+plt_start_yr <- 600
+plt_end_yr <- 635
+
+scaled_yield_plt <- yield_spec_disp_noise_prep_plt %>%
+  group_by(reserve_frac, f_fmsy) %>%
+  mutate(scaled_yield = scale(annual_yield)[,1]) %>%
+  ungroup()
+
+scaled_recs_plt <- recs_spec_disp_noise_ffmsy_plt %>% 
+  group_by(reserve_frac, f_fmsy) %>%
+  mutate(scaled_recruits = scale(recruits)[,1]) %>%
+  ungroup()
+
+scaled_yield_plt_4corr <- scaled_yield_plt %>%
+  mutate(reserve_frac = as.character(reserve_frac), 
+         f_fmsy = as.character(f_fmsy)) %>%
+  select(reserve_frac, f_fmsy, year, scaled_yield)
+
+scaled_recs_plt_4corr <- scaled_recs_plt %>%
+  mutate(reserve_frac = as.character(reserve_frac), 
+         f_fmsy = as.character(f_fmsy))  %>%
+  select(reserve_frac, f_fmsy, lagged_year, scaled_recruits)
+
+corr_vals <- scaled_yield_plt_4corr %>%
+  left_join(scaled_recs_plt_4corr,
+            by = c("reserve_frac" = "reserve_frac",
+                   "f_fmsy" = "f_fmsy",
+                   "year" = "lagged_year")) %>%
+  filter(.,complete.cases(reserve_frac, f_fmsy, year, scaled_yield, scaled_recruits)) %>%
+  group_by(reserve_frac, f_fmsy) %>%
+  summarise(corr = cor(scaled_yield, scaled_recruits))
+
+lagged_recs_yield_plt <- ggplot(scaled_yield_plt %>% 
+  filter(year > plt_start_yr, 
+         year <= plt_end_yr), 
+       aes(x = year, y = scaled_yield)) + 
+  facet_grid(reserve_frac ~ f_fmsy,
+               labeller = labeller(f_fmsy = label_both,
+                                   reserve_frac = label_both)) +
+  geom_line() +
+  geom_line(data = scaled_recs_plt %>% filter(lagged_year > plt_start_yr, 
+         lagged_year <= plt_end_yr), aes(x = lagged_year, y = scaled_recruits), 
+            colour = "blue") +
+  geom_text(
+      data = corr_vals,
+      x = 1.01 * plt_start_yr ,
+      y = 3,
+      aes(label = paste0("Corr: ", round(corr, 3)))
+  ) +
+  ylab("Scaled yield (black) and lagged + scaled recruits (blue)") +
+  xlab("Year") +
+  theme_bw()
+
+print(lagged_recs_yield_plt)
+
+postscript(file = file.path(out_path, paste0(exp, "-lagged-recs-yield-ts-plt.eps")), 
+           width = 8,
+           heigh = 6)
+print(lagged_recs_yield_plt)
+invisible(dev.off())
+
+png(
+  file = file.path(out_path, paste0(exp, "-lagged-recs-yield-ts-plt.png")),
+  width = 8,
+  heigh = 6,
+  units = "in", res = 600
+)
+print(lagged_recs_yield_plt)
+invisible(dev.off())
+
+
+```
