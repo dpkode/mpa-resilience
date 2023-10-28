@@ -52,8 +52,6 @@ run_sims_sm_write <- function(dt,
             for (o in 1:length(frac_reserves)) {
               for (q in 1:num_sims) {
                 
-                # print(paste0("q -- sim num: ", q))
-                
                 dt_one <- dt[i = .(
                   expmts[i],
                   spec_name[j],
@@ -91,7 +89,6 @@ run_sims_sm_write <- function(dt,
                   )
                 setcolorder(out_Ns, c("year", "age", "patch_num"))
                 setkeyv(out_Ns, c("year", "age", "patch_num"))
-                # setkeyv(out_Ns, c("age", "year", "patch_num"))
                 
                 stopifnot(max(out_Ns[patch_num]) = num_patches)
                 
@@ -103,7 +100,6 @@ run_sims_sm_write <- function(dt,
                   )
                 setcolorder(out_Y, c("year", "age", "patch_num"))
                 setkeyv(out_Y, c("year", "age", "patch_num"))
-                # setkeyv(out_Y, c("year", "age", "patch_num"))
                 
                 stopifnot(max(out_Y[patch_num]) = num_patches)
                 

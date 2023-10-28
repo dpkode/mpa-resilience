@@ -1588,16 +1588,13 @@ run_patch_sims2 <- function(t_steps,
   Z <- natural_mortality + fishing_mortality
   E <- matrix(0, nrow = num_patches, ncol = t_steps) # eggs
   R <- E
-  # Y <- array(data = NA, dim = dim(N)) #- c(1, 0, 0))
-  Y <- array(data = 0, dim = dim(N)) #- c(1, 0, 0))
-  Y[1, ,] <- 0
-  max_age <- nrow(N)
+  Y <- array(data = 0, dim = dim(N)) 
+  Y[, 1,] <- 0 # Y[1, ,] <- 0
+  max_age <- dim(N)[1] #nrow(N)
   # loop over time
   for (t in 2:t_steps) {
     # loop over patches
     for (n in 1:num_patches) {
-      # catch_at_age <-
-      #   (1 - exp(-((fishing_mortality[n] * selectivity) + natural_mortality))) * (fishing_mortality[n] * selectivity / (natural_mortality + fishing_mortality[n] * selectivity))
       N[, t, n] <-
         les_mat[, , n] %*% N[, t - 1, n] # advance the population
       N_deaths <- N[1:(max_age - 1), t - 1, n] - N[2:(max_age), t, n]
@@ -1605,11 +1602,8 @@ run_patch_sims2 <- function(t_steps,
         N_deaths * (
           fishing_mortality[n] * selectivity / (natural_mortality + fishing_mortality[n] * selectivity)
         )
-      # N_caught <- N[1:(length(weight_at_age) - 1), t, n] * catch_at_age
       Y[2:max_age, t, n] <-
         N_harvest * weight_at_age[-1] #[-(length(weight_at_age))]
-      # Y[, t, n] <-
-      #   N[1:(length(weight_at_age) - 1), t, n] * catch_at_age * weight_at_age[-(length(weight_at_age))]
       E[n, t] <- N[1, t, n] # pull out the eggs produced
     }
     # do larval pool dispersal
@@ -1632,8 +1626,6 @@ run_patch_sims2 <- function(t_steps,
   }
   out <- list(
     Ns = N,
-    # Recs = R,
-    # Eggs = E,
     Y = Y
   )
   return(out)
