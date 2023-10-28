@@ -1585,7 +1585,7 @@ run_patch_sims2 <- function(t_steps,
                             alpha,
                             beta,
                             noise_series) {
-  Z <- natural_mortality + fishing_mortality
+  
   E <- matrix(0, nrow = num_patches, ncol = t_steps) # eggs
   R <- E
   Y <- array(data = 0, dim = dim(N)) 
