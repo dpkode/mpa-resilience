@@ -23,6 +23,13 @@ tar_option_set(
 )
 
 
+# "Blue rockfish",
+# "Cabezon",
+# "Kelp bass",
+# "Pacific cod",
+# "China rockfish"
+
+
 r_seed <- 11
 tar_seed(default = r_seed)
 ## TODO: check for duck.db files and delete before running
@@ -43,8 +50,6 @@ list(
     c(
       "Blue rockfish",
       "Cabezon",
-      # "Kelp bass",
-      # "Pacific cod",
       "China rockfish"
     )
   ),
@@ -93,8 +98,10 @@ list(
   # Lower FLEPs correspond to populations that have experienced higher exploitation
   # 0.3 is close to population collapse, so 0.4 is close enough to get cohort resonance
   tar_target(flep_ratios,
+             # c(seq(0.2, 0.8, by = 0.2), 0.998)),
              c(seq(0.2, 0.975, by = 0.025), 0.998)),
   tar_target(reserve_fracs,
+             # seq(0, 0.8, by = 0.2)),
              seq(0, 0.8, by = 0.05)),
   # EPR (FLEP) can't go below this proportion of the unfished value
   # Note that the eq. recruitment is the point where line with 1/FLEP intersects SR curve
@@ -212,7 +219,7 @@ list(
       sim_arrays = sim_results_arrays_empty,
       fleps = flep_ratios,
       sim_sp_derived_vars = sim_species_derived_vars,
-      n_years = n_years,
+      n_years = n_years_135,
       n_patch = num_patches
     )
   ),
@@ -259,10 +266,10 @@ list(
   tar_target(white_noise,
              rnorm(n_years, 0, sd_recruitment)),
   tar_target(white_noise_135,
-             rnorm(635, 0, sd_recruitment)),
+             rnorm(n_years_135, 0, sd_recruitment)),
   tar_target(
     pre_enso_noise,
-    make_sim_enso(sim_enso_len = 1012, n_enso_sims = 100)
+    make_sim_enso(sim_enso_len = n_years, n_enso_sims = 100)
   ),
   tar_target(enso_noise,
              sd_recruitment * pre_enso_noise),
@@ -272,7 +279,7 @@ list(
     enso_noise_135,
     make_sim_ann_mei_ext(
       mei = enso_dat_135$mei,
-      sim_enso_len = 635,
+      sim_enso_len = n_years_135,
       n_enso_sims = 100
     ) * sd_recruitment
   ),
@@ -284,26 +291,34 @@ list(
   ##-------------------###
   ## SD RECRUIT 0.75  135
   ## NO DISPERSAL ENSO
+  
   ## OUT TABLES
-  tar_target(
-    dt_no_disp_white_135_75,
-    make_sim_dt2(
-      exp_names = exp_names_nd,
-      species_names = species_names,
-      bev_holt_alphas = bev_holt_alphas,
-      sd_recruitment = sd_recruitment,
-      reserve_fracs = reserve_fracs,
-      flep_ratios = flep_ratios,
-      noises = noises_white_135,
-      sim_nums = sim_nums
-    ),
-    format = "qs"
-  ),
+  # tar_target(
+  #   dt_no_disp_white_135_75,
+  #   make_sim_dt2(sim_nums = sim_nums,
+  #                reserve_fracs_vals = reserve_fracs,
+  #                flep_ratios_vals = flep_ratios,
+  #                sim_years = n_years_135,
+  #                max_age = ,
+  #                check=FALSE)
+  #   make_sim_dt2(
+  #     exp_names = exp_names_nd,
+  #     species_names = species_names,
+  #     bev_holt_alphas = bev_holt_alphas,
+  #     sd_recruitment = sd_recruitment,
+  #     reserve_fracs = reserve_fracs,
+  #     flep_ratios = flep_ratios,
+  #     noises = noises_white_135,
+  #     sim_nums = sim_nums
+  #   ),
+  #   format = "qs"
+  # ),
+  
   ## SIMULATION DATA TABLES
   tar_target(
     out_no_disp_white_135_75,
     run_sims_sm_write(
-      dt = dt_no_disp_white_135_75,
+      # dt = dt_no_disp_white_135_75,
       expmts = exp_names_nd,
       spec_name = species_names,
       alpha_bh = bev_holt_alphas,
@@ -331,26 +346,30 @@ list(
   ),
   ## SD RECRUIT 0.75  135
   ## NO DISPERSAL ENSO
+  
+  
   ## OUT TABLES
-  tar_target(
-    dt_no_disp_enso_135_75,
-    make_sim_dt2(
-      exp_names = exp_names_nd,
-      species_names = species_names,
-      bev_holt_alphas = bev_holt_alphas,
-      sd_recruitment = sd_recruitment,
-      reserve_fracs = reserve_fracs,
-      flep_ratios = flep_ratios,
-      noises = noises_enso_135,
-      sim_nums = sim_nums
-    ),
-    format = "qs"
-  ),
+  # tar_target(
+  #   dt_no_disp_enso_135_75,
+  #   make_sim_dt2(
+  #     exp_names = exp_names_nd,
+  #     species_names = species_names,
+  #     bev_holt_alphas = bev_holt_alphas,
+  #     sd_recruitment = sd_recruitment,
+  #     reserve_fracs = reserve_fracs,
+  #     flep_ratios = flep_ratios,
+  #     noises = noises_enso_135,
+  #     sim_nums = sim_nums
+  #   ),
+  #   format = "qs"
+  # ),
+  
+  
   ## SIMULATION DATA TABLES
   tar_target(
     out_no_disp_enso_135_75,
     run_sims_sm_write(
-      dt = dt_no_disp_enso_135_75,
+      # dt = dt_no_disp_enso_135_75,
       expmts = exp_names_nd,
       spec_name = species_names,
       alpha_bh = bev_holt_alphas,
@@ -379,26 +398,28 @@ list(
   
   ## SD RECRUIT 0.75  135
   ## LARVAL POOL WHITE
-  ## OUT TABLES
-  tar_target(
-    dt_lp_white_135_75,
-    make_sim_dt2(
-      exp_names = exp_names_lp,
-      species_names = species_names,
-      bev_holt_alphas = bev_holt_alphas,
-      sd_recruitment = sd_recruitment,
-      reserve_fracs = reserve_fracs,
-      flep_ratios = flep_ratios,
-      noises = noises_white_135,
-      sim_nums = sim_nums
-    ),
-    format = "qs"
-  ),
+ 
+ ## OUT TABLES
+  # tar_target(
+  #   dt_lp_white_135_75,
+  #   make_sim_dt2(
+  #     exp_names = exp_names_lp,
+  #     species_names = species_names,
+  #     bev_holt_alphas = bev_holt_alphas,
+  #     sd_recruitment = sd_recruitment,
+  #     reserve_fracs = reserve_fracs,
+  #     flep_ratios = flep_ratios,
+  #     noises = noises_white_135,
+  #     sim_nums = sim_nums
+  #   ),
+  #   format = "qs"
+  # ),
+ 
   ## SIMULATION DATA TABLES
   tar_target(
     out_lp_white_135_75,
     run_sims_sm_write(
-      dt = dt_lp_white_135_75,
+      # dt = dt_lp_white_135_75,
       expmts = exp_names_lp,
       spec_name = species_names,
       alpha_bh = bev_holt_alphas,
@@ -427,26 +448,28 @@ list(
   
   ## SD RECRUIT 0.75  135
   ## LARVAL POOL ENSO
-  ## OUT TABLES
-  tar_target(
-    dt_lp_enso_135_75,
-    make_sim_dt2(
-      exp_names = exp_names_lp,
-      species_names = species_names,
-      bev_holt_alphas = bev_holt_alphas,
-      sd_recruitment = sd_recruitment,
-      reserve_fracs = reserve_fracs,
-      flep_ratios = flep_ratios,
-      noises = noises_enso_135,
-      sim_nums = sim_nums
-    ),
-    format = "qs"
-  ),
+  
+ ## OUT TABLES
+  # tar_target(
+  #   dt_lp_enso_135_75,
+  #   make_sim_dt2(
+  #     exp_names = exp_names_lp,
+  #     species_names = species_names,
+  #     bev_holt_alphas = bev_holt_alphas,
+  #     sd_recruitment = sd_recruitment,
+  #     reserve_fracs = reserve_fracs,
+  #     flep_ratios = flep_ratios,
+  #     noises = noises_enso_135,
+  #     sim_nums = sim_nums
+  #   ),
+  #   format = "qs"
+  # ),
+ 
   ## SIMULATION DATA TABLES
   tar_target(
     out_lp_enso_135_75,
     run_sims_sm_write(
-      dt = dt_lp_enso_135_75,
+      # dt = dt_lp_enso_135_75,
       expmts = exp_names_lp,
       spec_name = species_names,
       alpha_bh = bev_holt_alphas,
@@ -503,6 +526,7 @@ list(
     )
   ))
 
+# tar_make(callr_function = callr::r_bg)
    
 ###-----------------------###
 ###-----------------------###

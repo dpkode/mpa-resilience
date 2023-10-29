@@ -1219,20 +1219,20 @@ set_sim_results_arrays <- function(sp_names,
 make_sim_dt2 <- function(sim_nums,
                          reserve_fracs_vals,
                          flep_ratios_vals,
-                         sim_years,
-                         max_age,
+                         # sim_years,
+                         # max_age,
                          check=FALSE) {
   
   # Steps to pre-populate data.table before simulation runs.
   
   sim_nums_vals <- 1:sim_nums
-  year_vals <- 1:sim_years
-  patch_vals <- 1:2
-  age_vals <- 1:max_age
+  # year_vals <- 1:sim_years
+  # patch_vals <- 1:2
+  # age_vals <- 1:max_age
   
   num_sims_dt <- rep(
     sim_nums_vals,
-    each = length(reserve_fracs_vals) * length(flep_ratios_vals) *  length(year_vals) * max(patch_vals) * length(age_vals)
+    each = length(reserve_fracs_vals) * length(flep_ratios_vals) # *  length(year_vals) * max(patch_vals) * length(age_vals)
   )
   
   flep_ratios_dt <- rep(
@@ -1247,22 +1247,22 @@ make_sim_dt2 <- function(sim_nums,
     times = sim_nums * length(flep_ratios_vals) 
   )
   
-  year_vals_dt <- rep(
-    year_vals,
-    each = length(patch_vals) * length(age_vals),
-    times =  sim_nums * length(reserve_fracs_vals) * length(flep_ratios_vals) 
-  )
-  
-  age_vals_dt <- rep(
-    age_vals,
-    each = length(patch_vals),
-    times = sim_nums * length(reserve_fracs_vals) * length(flep_ratios_vals) *  length(year_vals) 
-  )
-  
-  patch_num_dt <- rep(
-    patch_vals,
-    times = sim_nums * length(reserve_fracs_vals) * length(flep_ratios_vals) *  length(year_vals) * length(age_vals)
-  )
+  # year_vals_dt <- rep(
+  #   year_vals,
+  #   each = length(patch_vals) * length(age_vals),
+  #   times =  sim_nums * length(reserve_fracs_vals) * length(flep_ratios_vals) 
+  # )
+  # 
+  # age_vals_dt <- rep(
+  #   age_vals,
+  #   each = length(patch_vals),
+  #   times = sim_nums * length(reserve_fracs_vals) * length(flep_ratios_vals) *  length(year_vals) 
+  # )
+  # 
+  # patch_num_dt <- rep(
+  #   patch_vals,
+  #   times = sim_nums * length(reserve_fracs_vals) * length(flep_ratios_vals) *  length(year_vals) * length(age_vals)
+  # )
   
   
   if (check) {
