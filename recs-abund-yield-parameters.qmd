@@ -41,7 +41,7 @@ pretty_noise <- c("ENSO", "White")
 
 nice_dispersal <- pretty_dispersal[stringr::str_detect(exp, valid_dispersal)]
 nice_species <- pretty_species[stringr::str_detect(exp, valid_species)]
-nice_noise <- pretty_noise[stringr::str_detect(exp, valid_noise)]
+nice_noise <- pretty_noise[stringr::str_detect(exp, valid_noise)]o
 
 out_path <- file.path("output", current_species)
 
@@ -51,7 +51,7 @@ if (!dir.exists(out_path)) {
 
 ```
 
-### Experiment: `r params$experimenft`
+### Experiment: `r params$experiment`
 
 This is a parameterized report for:
 

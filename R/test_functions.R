@@ -35,40 +35,21 @@ run_sims_sm_write <- function(expmts,
               dbdir = "data/sim_out.duckdb",
               read_only = FALSE)
   
-  # for (i in 1:num_sims) {
-  #   for (j in 1:length(frac_reserves)) {
-  #     for (k in 1:length(fleps)) {
-  #       dt_one <- dt[i = sim_num == q & near(reserve_frac, frac_reserves[j]) & near(flep_ratio, fleps[n]),]
-  #       out <- run_patch_sims2(
-  #         t_steps = n_years,
-  #         num_patches = num_patches,
-  #         les_mat = les_mats[[j]][[n]],
-  #         con_mat = conn_mats[[o]],
-  #         frac_in_out = in_out_fracs[[o]],
-  #         N = sim_results[[j]][[n]],
-  #         # this needs the values from a unfished_N1 for each species
-  #         selectivity = as.integer(sim_spec_dervars[[j]][["F_select"]]),
-  #         fishing_mortality = c(0, f_vals[spec_flep_f_ind[[j]][[n]]]),
-  #         natural_mortality = sim_spec_pars[[j]][["M"]],
-  #         weight_at_age = sim_spec_pars[[j]][["biom_const"]] * sim_spec_dervars[[j]][["length_at_age"]] ^
-  #           sim_spec_pars[[j]][["biom_exp"]],
-  #         alpha = alpha_bh[[j]],
-  #         beta = beta_bh,
-  #         noise_series = noise_dat
-  #       )
-  #     }
-  #   }
-  # }
-  
   for (i in 1:length(expmts)) {
     for (j in 1:length(spec_name)) {
       for (k in noise_vec) {
         for (l in 1:length(recr_sd)) {
           for (m in 1:num_sims) {
+            print(paste0("num_sims: ", m))
             for (n in 1:length(frac_reserves)) {
+              # print(paste0("frac_res: ", frac_reserves[n]))
               for (o in 1:length(fleps)) {
-              
-                dt_one <- data.table(sim_num = num_sims[m], reserve_frac=frac_reserves[n], flep_ratio=fleps[o], number = list(), yield = list())
+                # print(paste0("fleps: ", fleps[o]))
+                dt_one <- data.table(sim_num = m, 
+                                     reserve_frac=as.character(frac_reserves[n]), 
+                                     flep_ratio=as.character(fleps[o]), 
+                                     number = list(), 
+                                     yield = list())
                 
                 # dt_one <- dt[i = .(
                 #   expmts[i],
@@ -128,33 +109,39 @@ run_sims_sm_write <- function(expmts,
                 rm(out_Ns, out_Y, out) 
                 
                 dt_one <- dt_one %>%
-                  # select(-recruits,-eggs) %>%
                   unnest(c(number, yield), names_repair = "minimal") 
                 
-                dt_one <- dt_one[!duplicated(as.list(dt_one))]
+                dt_one <- dt_one[, c(1,2,3,4,5,6,7,11)]
                 
-                if (m == 1) {
+                if (n == 1 & o == 1) {
                   dt_ddb <- dt_one
+                  # print("dt_ddb")
+                  # print(dim(dt_ddb))
                   rm(dt_one)
                 } else {
-                  dt_ddb <- data.table::rbindlist(list(dt_ddb, dt_one)) 
+                  # print("dt_ddb before append")
+                  # print(dim(dt_ddb))
+                  # print("dt_one before append")
+                  # print(dim(dt_one))
+                  dt_ddb <- rbind(dt_ddb, dt_one)
+                  # print("dt_ddb after append")
+                  # print(dim(dt_ddb))
                   rm(dt_one)
                 }
-
-                # duckdb::dbWriteTable(con,
-                #                      paste0(expmts[i], "_", tolower(sub(
-                #                        " ", "_", spec_name[j]
-                #                      )), "_", k, "_", substring(as.character(recr_sd[l]), 3)),
-                #                      dt_one,
-                #                      append = TRUE) # FALSE
               }
             }
+            print("Before ddb write")
+            print(head(dt_ddb))
             duckdb::dbWriteTable(con,
                                  paste0(expmts[i], "_", tolower(sub(
                                    " ", "_", spec_name[j]
                                  )), "_", k, "_", substring(as.character(recr_sd[l]), 3)),
-                                 dt_one,
+                                 dt_ddb,
                                  append = TRUE) # FALSE
+            print("After ddb write")
+            print(head(dt_ddb))
+            rm(dt_ddb)
+            
           }
         }
       }

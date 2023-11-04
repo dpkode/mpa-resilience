@@ -91,7 +91,7 @@ list(
              1:n_years_135),
   # Run how many replicate simulations?
   tar_target(sim_nums,
-             5),
+             25),
   tar_target(sd_recruitment,
              0.75),
   # Fraction of lifetime egg production (FLEP)

@@ -1,0 +1,215 @@
+---
+title: "Recruits, abundance, and yield time series and contours"
+author: "Botsford, Hastings, White, and Kilduff"
+execute: 
+  warning: false
+format:
+  html: 
+    page-layout: full
+    embed-resources: true
+    anchor-sections: true
+    fig-width: 7
+    fig-height: 5
+  pdf:
+    fig-width: 7
+    fig-height: 5
+  docx:
+    fig-width: 7
+    fig-height: 5
+editor: visual
+params:
+  experiment: "larval_pool_blue_rockfish_mei_135_75"
+---
+
+## Config and set up
+
+```{r}
+#| label: Good label name
+#| echo: false
+#| 
+# c("larval_pool_blue_rockfish_mei_135_75",
+# "larval_pool_blue_rockfish_white_135_75",
+# "larval_pool_cabezon_mei_135_75",
+# "larval_pool_cabezon_white_135_75",
+# "larval_pool_china_rockfish_mei_135_75",
+# "larval_pool_china_rockfish_white_135_75",
+# "no_dispersal_blue_rockfish_mei_135_75",
+# "no_dispersal_blue_rockfish_white_135_75",
+# "no_dispersal_cabezon_mei_135_75",
+# "no_dispersal_cabezon_white_135_75",
+# "no_dispersal_china_rockfish_mei_135_75",
+# "no_dispersal_china_rockfish_white_135_75")
+
+main_figs_path <- file.path("output", "main_figs")
+supp_figs_path <- file.path("output", "supp_figs")
+
+if (!dir.exists(main_figs_path)) {
+  dir.create(main_figs_path, recursive = TRUE) 
+}
+
+if (!dir.exists(supp_figs_path)) {
+  dir.create(supp_figs_path, recursive = TRUE) 
+}
+
+con <- DBI::dbConnect(duckdb::duckdb(),
+                      dbdir = "data/sim_out.duckdb",
+                      read_only = FALSE)
+```
+
+```{r}
+#| label: load-packages-data
+#| echo: false
+
+library(targets)
+suppressMessages(library(tidyverse))
+library(duckdb)
+options(dplyr.summarise.inform = FALSE)
+# Load relevant data from target objexts
+tar_load(sim_nums)
+tar_load(sim_len)
+tar_load(species_flep_fished_ind)
+tar_load(fishing_mortality_values)
+tar_load(species_parms)
+tar_load(sim_species_parms)
+tar_load(sim_species_derived_vars)
+
+# Load project functions
+source("R/functions.R")
+
+# constants
+burn_in_parm <- 500
+sim_len_parm <- 135
+
+x_text_position_parm <- 550
+
+waa_g <- sim_species_parms[[nice_species]][["biom_const"]] * sim_species_derived_vars[[nice_species]][["length_at_age"]] ^
+                    sim_species_parms[[nice_species]][["biom_exp"]]
+
+
+# use functions to create useful data structures
+# FLEP to F reference tables by species
+spec_fleps_2_fs <-
+  get_fs_from_fleps(species = nice_species,
+                    flep_inds = species_flep_fished_ind,
+                    f_vals =  fishing_mortality_values) 
+
+
+```
+
+## Main figures
+
+### Figure 3
+
+Contour plots showing the buffering effects of harvest rate and marine reserves on the abundance of a fished population, when there is no larval dispersal between the fished and reserve habitat patches.
+
+Species: Blue rockfish
+
+Dispersal: No Dispersal
+
+Environmental noise: ENSO (MEI)
+
+```{r}
+#| label: figure_3
+
+set.seed(11)
+num_sims_2_avg <- 5
+sims_2_use <- sort(sample(1:sim_nums, size = num_sims_2_avg, replace = FALSE))
+
+table_name <- "no_dispersal_blue_rockfish_mei_135_75"
+
+qry <- paste0("SELECT  sim_num, reserve_frac, flep_ratio, year, age, 
+              sum(number) as abundance,
+              sum(yield) as yield,
+              FROM '", table_name, 
+              "' WHERE sim_num IN (", toString(sims_2_use), ") AND year > 500 
+              GROUP BY sim_num, reserve_frac, flep_ratio, year, age
+              ORDER BY sim_num, reserve_frac, flep_ratio, year, age
+              ")
+
+out <- dbGetQuery(conn = con, qry)
+
+out_2 <- out %>%
+  group_by(sim_num, reserve_frac, flep_ratio) %>%
+  summarize(abundance = mean(abundance, na.rm = TRUE),
+            yield = mean(yield, na.rm=TRUE)) %>%
+  ungroup()
+  
+ggplot(out_2, aes(x = as.numeric(reserve_frac), 
+                y = as.numeric(flep_ratio),
+                z = abundance)) +
+  facet_grid(sim_num ~ .) +
+  geom_contour_filled()
+
+out_3 <- out_2 %>%
+  group_by(reserve_frac, flep_ratio) %>%
+  summarize(abundance = mean(abundance, na.rm = TRUE),
+            yield = mean(yield, na.rm = TRUE)) %>%
+  ungroup()
+
+ggplot(out_3, aes(x = as.numeric(reserve_frac), 
+                y = as.numeric(flep_ratio),
+                z = abundance)) +
+  geom_contour_filled()
+
+# qry <- "SELECT reserve_frac, flep_ratio, sum(number) as total_nums, sum(yield) as total_yield from '", table_name, "'where year > 500 group by reserve_frac, flep_ratio order by reserve_frac asc, flep_ratio asc"
+
+```
+
+### Figure 4
+
+Contour plots showing the buffering effects of harvest rate and marine reserves on the abundance of a fished population, when the fished and reserve patches share a larval pool.
+
+Species: Blue rockfish
+
+Dispersal: Larval pool
+
+Environmental noise: ENSO (MEI)
+
+```{r}
+#| label: figure_4
+```
+
+### Figure 5
+
+Representative timeseries of total population biomass under different combinations of fishing rate and marine reserve protection.
+
+Species: Blue rockfish
+
+Dispersal: Larval pool
+
+Environmental noise: ENSO (MEI)
+
+```{r}
+#| label: figure_5
+
+```
+
+### Figure 6
+
+Representative timeseries of fishery yield under different combinations of fishing rate and marine reserve protection.
+
+Species: Blue rockfish
+
+Dispersal: Larval pool
+
+Environmental noise: ENSO (MEI)
+
+```{r}
+#| label: figure_6
+
+```
+
+### Figure 7
+
+Representative timeseries of fishery yield (black curves) in the same harvest and marine reserve scenarios depicted in Fig. 5.
+
+Species: Blue rockfish
+
+Dispersal: Larval pool
+
+Environmental noise: ENSO (MEI)
+
+```{r}
+#| label: figure_7
+
+```
