@@ -255,6 +255,7 @@ list(
     larvpool_disp_conn_mat %>% purrr::map(., ~ matrix(.x[, 1], nrow = 2))
   ),
   # Environmental noise
+  # need to make n_sims number of noise signals for enso and white
   tar_target(noises_white,
              "white"),
   tar_target(noises_white_135,

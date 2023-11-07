@@ -82,17 +82,17 @@ sim_len_parm <- 135
 
 x_text_position_parm <- 550
 
-waa_g <- sim_species_parms[[nice_species]][["biom_const"]] * sim_species_derived_vars[[nice_species]][["length_at_age"]] ^
-                    sim_species_parms[[nice_species]][["biom_exp"]]
-
-
-# use functions to create useful data structures
-# FLEP to F reference tables by species
-spec_fleps_2_fs <-
-  get_fs_from_fleps(species = nice_species,
-                    flep_inds = species_flep_fished_ind,
-                    f_vals =  fishing_mortality_values) 
-
+# waa_g <- sim_species_parms[[nice_species]][["biom_const"]] * sim_species_derived_vars[[nice_species]][["length_at_age"]] ^
+#                     sim_species_parms[[nice_species]][["biom_exp"]]
+# 
+# 
+# # use functions to create useful data structures
+# # FLEP to F reference tables by species
+# spec_fleps_2_fs <-
+#   get_fs_from_fleps(species = nice_species,
+#                     flep_inds = species_flep_fished_ind,
+#                     f_vals =  fishing_mortality_values) 
+# 
 
 ```
 
@@ -111,11 +111,27 @@ Environmental noise: ENSO (MEI)
 ```{r}
 #| label: figure_3
 
+## Species parms
+
+brf_waa_g <- sim_species_parms[["Blue rockfish"]][["biom_const"]] * sim_species_derived_vars[["Blue rockfish"]][["length_at_age"]] ^
+                    sim_species_parms[["Blue rockfish"]][["biom_exp"]]
+
+brf_waa_g_df <- data.frame(age = 1: sim_species_parms[["Blue rockfish"]]$A_max,
+                           waa_g = brf_waa_g)
+
+# use functions to create useful data structures
+# FLEP to F reference tables by species
+spec_fleps_2_fs <-
+  get_fs_from_fleps(species = "Blue rockfish",
+                    flep_inds = species_flep_fished_ind,
+                    f_vals =  fishing_mortality_values) 
+
+## Qry 
 set.seed(11)
 num_sims_2_avg <- 5
 sims_2_use <- sort(sample(1:sim_nums, size = num_sims_2_avg, replace = FALSE))
 
-table_name <- "no_dispersal_blue_rockfish_mei_135_75"
+table_name <- "no_dispersal_blue_rockfish_white_135_75"
 
 qry <- paste0("SELECT  sim_num, reserve_frac, flep_ratio, year, age, 
               sum(number) as abundance,
@@ -128,26 +144,213 @@ qry <- paste0("SELECT  sim_num, reserve_frac, flep_ratio, year, age,
 
 out <- dbGetQuery(conn = con, qry)
 
-out_2 <- out %>%
-  group_by(sim_num, reserve_frac, flep_ratio) %>%
+get_f_maxes_yield <- function(out_df,
+                              fleps_2_fs) {
+  # Find the fishing mortality level that maximizes yield
+  # with no reserves
+  F_maxes_yield <- out %>%
+    dplyr::filter(reserve_frac == "0") %>%
+    dplyr::left_join(., y = fleps_2_fs, by = join_by(flep_ratio == flep_vals_ch)) %>%
+    dplyr::group_by(f_vals, flep_ratio, year) %>%
+    dplyr::summarise(yield = sum(yield),
+                     abundance = sum(abundance)) %>%
+    dplyr::ungroup() %>%
+    dplyr::group_by(f_vals, flep_ratio) %>%
+    dplyr::summarize(yield = mean(yield, na.rm = TRUE),
+                     abundance = mean(abundance, na.rm = TRUE)) %>%
+    ungroup() %>%
+    dplyr::filter(yield == max(yield)) %>%
+    .$f_vals
+  
+  return(F_maxes_yield)
+}
+
+df_add_fs_out <- function(out,
+                          spec_fleps_2_fs,
+                          F_maxes_yield) {
+out_fs <- out %>%
+  mutate(flep_ratio_ch = as.character(flep_ratio)) %>%
+  dplyr::left_join(., y = spec_fleps_2_fs, by = join_by(flep_ratio == flep_vals_ch)) %>%
+  dplyr::mutate(f_fmsy = round(f_vals / F_maxes_yield, 2)) %>%
+  dplyr::left_join(., y = brf_waa_g_df, join_by(age == age)) %>%
+  dplyr::mutate(biomass_at_age = (abundance * waa_g) / 1E6)
+
+}
+
+
+get_median_yield <- function(df_out_fs) {
+  # returns the mean of median yield at at F = F_msy 
+  # for a coastline with no reserves across sims
+  
+  stopifnot(colnames(df_out_fs) == c("sim_num", "reserve_frac", "flep_ratio",
+                                     "year", "age", "abundance", "yield", 
+                                     "flep_ratio_ch", "flep_vals", "f_vals", 
+                                     "f_fmsy", "waa_g", "biomass_at_age"))
+  
+  sim_num_2_use <- min(df_out_fs$sim_num)
+  med_yield <- df_out_fs %>%
+    dplyr::filter(near(f_fmsy, 1), near(as.numeric(reserve_frac), 0))  %>%
+    dplyr::group_by(sim_num,
+                    reserve_frac,
+                    f_fmsy,
+                    year) %>%
+    dplyr::summarise(ann_yield = sum(yield)) %>%
+    dplyr::ungroup() %>%
+    dplyr::group_by(sim_num) %>%
+    dplyr::summarise(med_ann_yield = median(ann_yield)) %>%
+    dplyr::ungroup() %>%
+    dplyr::summarise(avg_med_yield_f_fmsy = mean(med_ann_yield)) %>%
+    .$avg_med_yield_f_fmsy
+  return(med_yield)
+}
+
+
+
+get_median_biomass <- function(df_out_fs) {
+  # returns the mean of median abundance at at F = F_msy 
+  # for a coastline with no reserves across sims
+  stopifnot(colnames(df_out_fs) == c("sim_num", "reserve_frac", "flep_ratio",
+                                     "year", "age", "abundance", "yield", 
+                                     "flep_ratio_ch", "flep_vals", "f_vals", 
+                                     "f_fmsy", "waa_g", "biomass_at_age"))
+  med_biomass <- df_out_fs %>%
+    dplyr::filter(near(f_fmsy, 1), near(as.numeric(reserve_frac), 0))  %>%
+    dplyr::group_by(sim_num,
+                    reserve_frac,
+                    flep_ratio,
+                    year) %>%
+    dplyr::summarise(ann_biomass = sum(biomass_at_age)) %>%
+    dplyr::ungroup() %>%
+     dplyr::group_by(sim_num) %>%
+    dplyr::summarise(med_ann_biomass = median(ann_biomass)) %>%
+    dplyr::summarise(avg_med_biomass_f_fmsy = mean(med_ann_biomass)) %>%
+    .$avg_med_biomass_f_fmsy
+  return(med_biomass)
+}
+
+
+df_yld_bm_stats_by_sim_f_frac_year <- function(df_out_fs,
+                                      sims_num_2_use) {
+  stopifnot(colnames(df_out_fs) == c("sim_num", "reserve_frac", "flep_ratio",
+                                     "year", "age", "abundance", "yield", 
+                                     "flep_ratio_ch", "flep_vals", "f_vals", 
+                                     "f_fmsy", "waa_g", "biomass_at_age"))
+  # make a sub function
+  out_df <- df_out_fs %>%
+    dplyr::filter(near(sim_num, sim_num_2_use)) %>%
+    dplyr::filter(reduce(map(
+      frac_reserves,
+      near,
+      x = as.numeric(reserve_frac),
+      tol = 1e-4
+    ), `|`)) %>%
+    dplyr::group_by(sim_num, reserve_frac, f_fmsy, year) %>%
+    dplyr::summarize(annual_yield = sum(yield),
+                     annual_biomass = sum(biomass_at_age)) %>%
+    dplyr::ungroup() %>%
+    dplyr::filter(reduce(map(
+      f_fmsys, near, x = f_fmsy, tol = 1e-4
+    ), `|`))
+  return(out_df)
+}
+
+
+# df_exp_spec_noise_rec_fs
+prep_ann_yield_abund_for_plot <- function(df_out_fs,
+                                          frac_reserves = c(0, 0.25, 0.50),
+                                          f_fmsys = c(0, 0.52, 1.00, 2.09)) {
+  
+  sim_num_2_use <- min(df_out_fs$sim_num)
+  if (length(f_fmsys) < 1 | is.null(f_fmsys)) {
+    stop("Please specify f_fmsy values to use")
+  }
+  
+  if (length(frac_reserves) < 1 | is.null(frac_reserves)) {
+    stop("Please specify frac_reserves values to use")
+  }
+
+    
+    # make a sub function
+    supp_plt_df <- main_plt_df %>%
+      dplyr::mutate(below_thresh_yld = if_else(annual_yield <= med_yield, 1, 0),
+                    below_thresh_bm = if_else(annual_biomass <= med_biomass, 1, 0)) %>%
+      dplyr::group_by(sim_num, reserve_frac, f_fmsy) %>%
+      dplyr::summarise(
+        mean_yield = round(mean(annual_yield, na.rm = TRUE), 2),
+        mean_biomass = round(mean(annual_biomass, na.rm = TRUE), 2),
+        sd_yield = round(sd(annual_yield, na.rm = TRUE), 2),
+        sd_biomass = round(sd(annual_biomass, na.rm = TRUE), 2),
+        cv_yield = round(sd(annual_yield, na.rm = TRUE)/mean(annual_yield, na.rm = TRUE), 2),
+        cv_biomass = round(sd(annual_biomass, na.rm = TRUE)/mean(annual_biomass, na.rm = TRUE), 2),
+        yrs_below_yield_thresh = round(sum(below_thresh_yld)/135, 2),
+        yrs_below_biomass_thresh = round(sum(below_thresh_bm)/135, 2)
+      ) %>%
+      dplyr::ungroup() %>%
+      dplyr::group_by(reserve_frac, f_fmsy) %>%
+      dplyr::summarize(
+        mean_yield = round(mean(mean_yield, na.rm = TRUE), 2),
+        mean_yield_lab = paste0("Mean yield: ", mean_yield),
+        mean_biomass = round(mean(mean_biomass, na.rm = TRUE), 2),
+        mean_biomass_lab = paste0("Mean biomass: ", mean_yield),
+        sd_yield = round(sd(annual_yield, na.rm = TRUE), 2),
+        sd_yield_lab = paste0("SD yield: ", sd_yield),
+        sd_abundance = round(sd(annual_abundance, na.rm = TRUE), 2),
+        sd_abundance_lab = paste0("SD biomass: ", sd_yield),
+        cv_yield = round(sd(annual_yield, na.rm = TRUE)/mean(annual_yield, na.rm = TRUE), 2),
+        cv_yield_lab = paste0("CV yield: ", cv_yield),
+        cv_biomass = round(sd(mean_abundance, na.rm = TRUE)/mean(mean_abundance, na.rm = TRUE), 2),
+        cv_biomass_lab = paste0("CV biomass: ", cv_biomass),
+        yrs_below_yield_thresh = paste("% YR below yield thresh: ", round(sum(below_thresh_yld)/135, 2)),
+        yrs_below_biomass_thresh = paste("% YR below biomass thresh: ", round(sum(below_thresh_bm)/135, 2))
+      ) %>%
+      ungroup()
+    return(list(main_plt_df, supp_plt_df, med_yield))
+  }
+
+
+F_brf_maxes_yield <- get_f_maxes_yield(out_df = out,
+                              fleps_2_fs = spec_fleps_2_fs)
+F_brf_maxes_yield
+out_fs
+
+med_yield <- get_median_yield(df_out_fs = df_out_fs) 
+med_yield
+med_biomass <- get_median_biomass(df_out_fs = df_out_fs)
+med_biomass
+out <- df_yld_bm_stats_by_sim_f_frac_year(df_out_fs = df_out_fs,
+                                      sims_num_2_use = sims_2_use)
+out
+test_plot_df <- prep_ann_yield_abund_for_plot(
+  df_out_fs = out_fs,
+  frac_reserves = c(0, 0.25, 0.50),
+  f_fmsys = c(0, 0.52, 1.00, 2.09)
+)
+
+
+
+
+out_2 <- out_fs %>%
+  group_by(sim_num, reserve_frac, f_fmsy) %>%
   summarize(abundance = mean(abundance, na.rm = TRUE),
             yield = mean(yield, na.rm=TRUE)) %>%
   ungroup()
   
-ggplot(out_2, aes(x = as.numeric(reserve_frac), 
-                y = as.numeric(flep_ratio),
-                z = abundance)) +
-  facet_grid(sim_num ~ .) +
-  geom_contour_filled()
-
 out_3 <- out_2 %>%
-  group_by(reserve_frac, flep_ratio) %>%
+  group_by(reserve_frac, f_fmsy) %>%
   summarize(abundance = mean(abundance, na.rm = TRUE),
             yield = mean(yield, na.rm = TRUE)) %>%
   ungroup()
 
+
+ggplot(out_2, aes(x = as.numeric(reserve_frac), 
+                y = as.numeric(f_fmsy),
+                z = abundance)) +
+  facet_grid(sim_num ~ .) +
+  geom_contour_filled()
+
+
 ggplot(out_3, aes(x = as.numeric(reserve_frac), 
-                y = as.numeric(flep_ratio),
+                y = as.numeric(f_fmsy),
                 z = abundance)) +
   geom_contour_filled()
 
