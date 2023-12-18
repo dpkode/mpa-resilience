@@ -24,7 +24,7 @@
 #'
 #' sp_parms <- load_species_parms() # add how to use in targets workflow
 #'
-
+#### USED
 load_species_parms <-
   function(fp = file.path("data", "species_parameters.csv")) {
     spec_parms_fp <- fp
@@ -107,7 +107,37 @@ get_species_parms <- function(df_parms, species_name) {
   )
 }
 
-#' add documentation
+#' Return a list life history parameters for multiple species
+#'
+#' Given a dataframe of fish life history parameters and a vector of species names,
+#' this function retrieves the parameters for each species using the 
+#' get_species_parms() function.
+#'
+#' @param parm_df Dataframe of model parameters by species
+#' @param sp_names Character vector of species names
+#' 
+#' @return Named list of parameter lists, one list per species
+#' 
+#' @examples 
+#' params_df <- data.frame(
+#'   species = c("Cod", "Rockfish"),
+#'   M = c(0.2, 0.1),
+#'   L_inf = c(60, 40), 
+#'   k = c(0.5, 0.7),
+#'   t_0 = c(0.05, -0.05),
+#'   A_max  c(15, 27),
+#'   A_mat = c(3, 5),
+#'   A_fish = c(4, 5),
+#'   biom_const = c(1.1, 0.9),
+#'   biom_exp = c(3.02, 3)
+#' )
+#'
+#' species <- c("Cod", "Rockfish")
+#'
+#' species_params <- list_species_parms(params_df, species)
+#'
+#' @export 
+#### USED 
 list_species_parms <- function(parm_df,
                                sp_names) {
   sim_species_parms <- sp_names %>%
@@ -117,38 +147,6 @@ list_species_parms <- function(parm_df,
   
   return(sim_species_parms)
 }
-
-# test_function <- function(sp_names,
-#                           df_parms) {
-#   sim_species_parms <- sp_names %>%
-#     purrr::set_names() %>%
-#     purrr::map(.,
-#                ~ get_species_parms(df_parms = parm_df, species_name =  .x))
-#
-#   sp_names <- species_names
-#   df_parms <- species_parms
-#   out <- vector(mode = "list", length = length(sp_names))
-#
-#   for (i in 1:length(sp_names)) {
-#     df_species <- df_parms %>%
-#       dplyr::filter(species == sp_names[i])
-#     sp_parms_list <- list(
-#       species = df_species$species,
-#       M = df_species$M,
-#       L_inf = df_species$L_inf,
-#       k = df_species$k,
-#       t_0 = df_species$t_0,
-#       A_max = df_species$A_max,
-#       A_mat = df_species$A_mat,
-#       A_fish = df_species$A_fish,
-#       biom_const = df_species$biom_const,
-#       biom_exp = df_species$biom_exp
-#     )
-#
-#     out[[i]] <- sp_parms_list
-#   }
-#   return(out)
-# }
 
 #'
 #' @title vectors and higher dimensional arrays of species specific life history
@@ -240,18 +238,68 @@ make_derived_variables <- function(spec_parms,
   )
 }
 
-
+#' List derived variables for multiple species
+#'
+#' For a list of species parameter lists and a fishing mortality rate, 
+#' this function calculates derived variables for each species using
+#' the make_derived_variables() function.
+#'
+#' @param spec_parms List of species parameter lists
+#' @param sp_names Character vector of species names
+#' @param fish_mort Fishing mortality rate  
+#'
+#' @return Named list of derived variable lists, one list per species
+#'
+#' @examples
+#' params <- list(
+#'   list(M = 0.2, L_inf = 60, k = 0.5), # Cod
+#'   list(M = 0.1, L_inf = 40, k = 0.7)  # Rockfish
+#' )
+#' 
+#' species <- c("Cod", "Rockfish")
+#' 
+#' derived_vars <- list_derived_variables(params, species, 0.3)
+#'
+#' @export
 list_derived_variables <- function(spec_parms,
                                    sp_names,
                                    fish_mort) {
+  # Validate inputs
+  stopifnot(is.list(spec_parms))
+  stopifnot(is.numeric(fish_mort))
+  
   sim_species_derived_vars <- spec_parms %>%
     purrr::map(.,
                ~  make_derived_variables(spec_parms = .x, fish_mort = fish_mort))
   
   names(sim_species_derived_vars) <- sp_names
+  
   return(sim_species_derived_vars)
 }
 
+#' List lifetime egg production for multiple species
+#'
+#' Takes a vector of species names and a list of derived variables, 
+#' and returns the lifetime egg production (LEP) for each species.
+#'
+#' @param spec_names Character vector of species names
+#' @param sim_spec_der_var List of derived variable lists, one per species
+#'
+#' @return Named numeric vector of LEP values, one per species  
+#' 
+#' @examples
+#'  
+#' derived_vars <- list(
+#'   list(EPRs = c(2000, 4000, 6000)), # Species 1 
+#'   list(EPRs = c(500, 1000, 1500)) # Species 2
+#' )
+#'  
+#' species <- c("Cod", "Herring")
+#'
+#' lep_list <- list_lep(species, derived_vars)
+#' 
+#' @export
+#### USED
 list_lep <- function(spec_names, sim_spec_der_var) {
   lifetime_eggs_production <- spec_names %>%
     purrr::map(., ~ sim_spec_der_var[[.x]][["EPRs"]][1])
@@ -473,6 +521,7 @@ make_sim_enso <- function(sim_enso_len = 1012,
   return(sim_enso_ts)
 }
 
+#### USED
 make_ann_mei_ext <- function() {
   
   mei_url <- "https://psl.noaa.gov/enso/mei.ext/table.ext.html"
@@ -506,9 +555,10 @@ make_ann_mei_ext <- function() {
   return(mei_df)
 }
 
+#### USED
 make_sim_ann_mei_ext <- function(mei,
                                  sim_enso_len,
-                                 n_enso_sims = 100) {
+                                 n_enso_sims = 500) {
   sim_mei_matrix <- matrix(0,
                            nrow = length(mei),
                            ncol = n_enso_sims)
@@ -516,6 +566,7 @@ make_sim_ann_mei_ext <- function(mei,
   # create a time series by concatenating several fft + rand theta + ifft
   # and then pick a random starting point in the series
   for (i in 1:n_enso_sims) {
+    
     theta <-
       runif(n = length(mei)) * 2 * pi # 2pi converts to radians
     # Now do inverse FFT with modulus (real part) of original FFT but randomized phase
@@ -1003,8 +1054,30 @@ make_sim_storage_list <- function(sp_names = "Cabezon",
   return(species_list)
 }
 
-## get the index for the F yielding target flep
 
+#' Calculate the index of the fished effort (F) for each species that produces the
+#' target FLEP
+#'
+#' @param flep_vals A vector of fishing effort values
+#' @param sp_names A vector of species names
+#' @param relative_flep A matrix of relative fishing effort values for each species
+#'
+#' @return A list of vectors, where each vector contains the indices of the fished effort values for a particular species
+#'
+#' @examples
+#' flep_vals <- c(0.1, 0.2, 0.3, 0.4, 0.5)
+#' sp_names <- c("sp1", "sp2", "sp3")
+#' relative_flep <- matrix(c(0.8, 0.9, 0.7, 0.6, 0.5,
+#'                          0.9, 0.8, 0.7, 0.6, 0.5,
+#'                          0.7, 0.6, 0.8, 0.9, 0.5),
+#'                        nrow = 3, ncol = 5)
+#'
+#' flep_fished_ind <- get_index_for_fleps(flep_vals, sp_names, relative_flep)
+#'
+#' print(flep_fished_ind)
+#'
+#' @export
+#### USED
 get_index_for_fleps <- function(flep_vals,
                                 sp_names,
                                 relative_flep) {
@@ -1019,8 +1092,32 @@ get_index_for_fleps <- function(flep_vals,
   return(flep_fished_ind)
 }
 
-#' Make Leslie matrices for population projection by one time step
 
+#' Create Leslie matrices to project each species based on  fishing effort level
+#'
+#' @param sp_names A vector of species names
+#' @param fleps A vector of fraction lifetime egg production levels
+#' @param n_patch The number of patches, 2, one fished patch and one unfished
+#' @param sim_sp_parms A list of that contains life history parameters for each species
+#' @param sim_sp_derived_vars A list of derived life history parameters for each species
+#' @param sp_flep_fished_ind A list of vectors, where each vector contains indices for the fishing effort values (F) for a particular species.
+#'
+#' @return A list of lists of Leslie matrices, where each inner list contains the Leslie matrices for a particular species and fishing effort level.
+#'
+#' @examples
+#' sp_names <- c("sp1", "sp2")
+#' fleps <- c(0.1, 0.2)
+#' n_patch <- 10
+#' sim_sp_parms <- list(sp1 = list(A_max = 10, W_inf = 1), sp2 = list(A_max = 5, W_inf = 2))
+#' sim_sp_derived_vars <- list(sp1 = list(surv_fished = c(0.9, 0.8), fecundity_at_age = c(0.1, 0.2)), sp2 = list(surv_fished = c(0.7, 0.6), fecundity_at_age = c(0.3, 0.4)))
+#' sp_flep_fished_ind <- list(sp1 = c(1, 2), sp2 = c(2, 1))
+#'
+#' leslie_matrices <- make_leslie_matrix_sp_flep(sp_names, fleps, n_patch, sim_sp_parms, sim_sp_derived_vars, sp_flep_fished_ind)
+#'
+#' print(leslie_matrices)
+#'
+#' @export
+#### USED
 make_leslie_matrix_sp_flep <- function(sp_names,
                                        fleps,
                                        n_patch,
@@ -1046,6 +1143,29 @@ make_leslie_matrix_sp_flep <- function(sp_names,
   return(leslie_matrices)
 }
 
+#' Set the fished equilibrium recruit levels for each species and FLEP level (i.e., fishing effort (F))
+#'
+#' @param sp_names A vector of species names
+#' @param fleps A vector of fraction lifetime egg production levels
+#' @param f_eq_recs A list of lists of fished equilibrium recruits for each species and fishing effort level.
+#' @param sp_der_var A list of simulation-derived variables for each species.
+#' @param sp_flep_f_ind A list of vectors, where each vector contains the indices of the fished effort values for a particular species.
+#'
+#' @return A list of lists of fished N1 values, where each inner list contains the fished N1 values for a particular species and fishing effort level.
+#'
+#' @examples
+#' sp_names <- c("sp1", "sp2")
+#' fleps <- c(0.1, 0.2)
+#' f_eq_recs <- list(sp1 = list(flep_0.1 = c(100, 200), flep_0.2 = c(300, 400)), sp2 = list(flep_0.1 = c(50, 100), flep_0.2 = c(150, 200)))
+#' sp_der_var <- list(sp1 = list(SADs = matrix(c(0.8, 0.9, 0.7, 0.6), ncol = 2)), sp2 = list(SADs = matrix(c(0.9, 0.8, 0.7, 0.6), ncol = 2)))
+#' sp_flep_f_ind <- list(sp1 = c(1, 2), sp2 = c(2, 1))
+#'
+#' fished_N1 <- set_fished_eq_recruits(sp_names, fleps, f_eq_recs, sp_der_var, sp_flep_f_ind)
+#'
+#' print(fished_N1)
+#'
+#' @export
+#### USED
 set_fished_eq_recruits <- function(sp_names,
                                    fleps,
                                    f_eq_recs = fished_equilibrium_recruits,
@@ -1066,6 +1186,8 @@ set_fished_eq_recruits <- function(sp_names,
   return(fished_N1)
 }
 
+
+#### USED
 set_fished_equilibrium_recruits <- function(sp_names,
                                             flep_vals,
                                             ind_species_flep_fished,
@@ -1094,6 +1216,30 @@ set_fished_equilibrium_recruits <- function(sp_names,
 }
 
 
+#' Initialize arrays for storing simulation results
+#'
+#' @param sp_names A vector of species names.
+#' @param sim_arrays A list of arrays, one for each species.
+#' @param fleps A vector of fishing effort levels.
+#' @param sim_sp_derived_vars A list of simulation-derived variables for each species.
+#' @param n_years The number of years in the simulation.
+#' @param n_patch The number of patches.
+#'
+#' @return A list of arrays, one for each species, each of which is a 3-dimensional array with dimensions representing age, year, and patch.
+#'
+#' @examples
+#' sp_names <- c("sp1", "sp2")
+#' fleps <- c(0.1, 0.2)
+#' sim_sp_derived_vars <- list(sp1 = list(ages = 1:5), sp2 = list(ages = 1:4))
+#' n_years <- 10
+#' n_patch <- 2
+#'
+#' sim_arrays <- set_sim_results_arrays(sp_names, sim_arrays, fleps, sim_sp_derived_vars, n_years, n_patch)
+#'
+#' print(sim_arrays)
+#'
+#' @export
+#### USED
 set_sim_results_arrays <- function(sp_names,
                                    sim_arrays,
                                    fleps,
@@ -1537,6 +1683,7 @@ return(dt)
 ###
 ###
 
+#### USED
 init_vals_sim <- function(species_names,
                           flep_ratios,
                           sim_results_arrays,
@@ -1589,8 +1736,8 @@ run_patch_sims2 <- function(t_steps,
   E <- matrix(0, nrow = num_patches, ncol = t_steps) # eggs
   R <- E
   Y <- array(data = 0, dim = dim(N)) 
-  Y[, 1,] <- 0 # Y[1, ,] <- 0
-  max_age <- dim(N)[1] #nrow(N)
+  Y[, 1,] <- 0 
+  max_age <- dim(N)[1] 
   # loop over time
   for (t in 2:t_steps) {
     # loop over patches
@@ -1603,7 +1750,7 @@ run_patch_sims2 <- function(t_steps,
           fishing_mortality[n] * selectivity / (natural_mortality + fishing_mortality[n] * selectivity)
         )
       Y[2:max_age, t, n] <-
-        N_harvest * weight_at_age[-1] #[-(length(weight_at_age))]
+        N_harvest * weight_at_age[-1] / 1E6 # grams to MTi[]
       E[n, t] <- N[1, t, n] # pull out the eggs produced
     }
     # do larval pool dispersal

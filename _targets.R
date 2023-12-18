@@ -1,7 +1,3 @@
-# add unit/data tests (via testthat and assertr)
-# add version control?
-
-
 library(targets)
 library(tarchetypes)
 source(file.path("R", "functions.R"))
@@ -16,23 +12,18 @@ tar_option_set(
     "fst",
     "qs",
     "metR",
-    "isoband",
-    "signal",
-    "imager"
+    "isoband"
+    # "signal", # using fft(..., inverse = TRUE) instead of ifft(...)
+    # "imager" # used in old plotting function: plt_sdmn_yield_lp_diff_nd_gradvec_cont2
   )
 )
 
 
-# "Blue rockfish",
-# "Cabezon",
-# "Kelp bass",
-# "Pacific cod",
-# "China rockfish"
-
-
 r_seed <- 11
 tar_seed(default = r_seed)
+
 ## TODO: check for duck.db files and delete before running
+
 list(
   tar_target(exp_names_nd,
              "no_dispersal"),
@@ -77,31 +68,29 @@ list(
   # Simulation length burn_in and actual sim_len:
   tar_target(burn_in,
              500),
-  tar_target(sim_len,
-             512),
+  # tar_target(sim_len,
+  #            512),
   tar_target(sim_len_135,
              135),
-  tar_target(n_years,
-             burn_in + sim_len),
+  # tar_target(n_years,
+  #            burn_in + sim_len),
   tar_target(n_years_135,
              burn_in + sim_len_135),
-  tar_target(sim_yrs,
-             1:n_years),
+  # tar_target(sim_yrs,
+  #            1:n_years),
   tar_target(sim_yrs_135,
              1:n_years_135),
   # Run how many replicate simulations?
   tar_target(sim_nums,
-             25),
+             5), ### --> 10
   tar_target(sd_recruitment,
              0.75),
   # Fraction of lifetime egg production (FLEP)
   # Lower FLEPs correspond to populations that have experienced higher exploitation
   # 0.3 is close to population collapse, so 0.4 is close enough to get cohort resonance
   tar_target(flep_ratios,
-             # c(seq(0.2, 0.8, by = 0.2), 0.998)),
              c(seq(0.2, 0.975, by = 0.025), 0.998)),
   tar_target(reserve_fracs,
-             # seq(0, 0.8, by = 0.2)),
              seq(0, 0.8, by = 0.05)),
   # EPR (FLEP) can't go below this proportion of the unfished value
   # Note that the eq. recruitment is the point where line with 1/FLEP intersects SR curve
@@ -256,33 +245,44 @@ list(
   ),
   # Environmental noise
   # need to make n_sims number of noise signals for enso and white
-  tar_target(noises_white,
-             "white"),
+  # tar_target(noises_white,
+  #            "white"),
   tar_target(noises_white_135,
                         "white_135"),
-  tar_target(noises_enso,
-             "enso"),
+  # tar_target(noises_enso,
+  #            "enso"),
   tar_target(noises_enso_135,
              "mei_135"),
-  tar_target(white_noise,
-             rnorm(n_years, 0, sd_recruitment)),
+  # tar_target(white_noise,
+  #            matrix(data = rnorm(n_years * sim_nums, 0, sd_recruitment), 
+  #                   ncol = sim_nums, nrow = n_years, byrow = FALSE)),
   tar_target(white_noise_135,
-             rnorm(n_years_135, 0, sd_recruitment)),
-  tar_target(
-    pre_enso_noise,
-    make_sim_enso(sim_enso_len = n_years, n_enso_sims = 100)
-  ),
-  tar_target(enso_noise,
-             sd_recruitment * pre_enso_noise),
+             matrix(data = rnorm(n_years_135 * sim_nums, 0, sd_recruitment), 
+                    ncol = sim_nums, nrow = n_years, byrow = FALSE)),
+  # tar_target(
+  #   pre_enso_noise,
+  #   make_sim_enso(sim_enso_len = n_years, n_enso_sims = 100)
+  # ),
+  # tar_target(enso_noise,
+  #            sd_recruitment * pre_enso_noise),
   tar_target(enso_dat_135,
              make_ann_mei_ext()),
   tar_target(
     enso_noise_135,
-    make_sim_ann_mei_ext(
-      mei = enso_dat_135$mei,
-      sim_enso_len = n_years_135,
-      n_enso_sims = 100
-    ) * sd_recruitment
+    {out <- matrix(NA_real_, ncol=sim_nums, nrow=n_years_135)
+    for (i in 1:sim_nums) {
+      out[,i] <- make_sim_ann_mei_ext(
+        mei = enso_dat_135$mei,
+        sim_enso_len = n_years_135,
+        n_enso_sims = 100
+      ) * sd_recruitment}
+     out
+    }
+    # make_sim_ann_mei_ext(
+    #   mei = enso_dat_135$mei,
+    #   sim_enso_len = n_years_135,
+    #   n_enso_sims = 500
+    # ) * sd_recruitment
   ),
   ## NEW BASE CASE
   ## SIM ESNO DERIVED 135 YR MEI

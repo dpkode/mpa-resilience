@@ -4,3 +4,7 @@
 .Ruserdata
 .DS_Store
 data
+*.zip
+*.png
+*.svg
+*.docx
