@@ -1,7 +1,6 @@
 library(targets)
 library(tarchetypes)
 source(file.path("R", "functions.R"))
-source(file.path("R", "test_functions.R"))
 options(tidyverse.quiet = TRUE)
 tar_option_set(
   packages = c(
@@ -18,11 +17,10 @@ tar_option_set(
   )
 )
 
-
 r_seed <- 11
 tar_seed(default = r_seed)
 
-## TODO: check for duck.db files and delete before running
+## NOTE:check for duckdb file ("data/sim_out.duckdb") and delete before running
 
 list(
   tar_target(exp_names_nd,
@@ -68,26 +66,20 @@ list(
   # Simulation length burn_in and actual sim_len:
   tar_target(burn_in,
              500),
-  # tar_target(sim_len,
-  #            512),
   tar_target(sim_len_135,
              135),
-  # tar_target(n_years,
-  #            burn_in + sim_len),
   tar_target(n_years_135,
              burn_in + sim_len_135),
-  # tar_target(sim_yrs,
-  #            1:n_years),
   tar_target(sim_yrs_135,
              1:n_years_135),
   # Run how many replicate simulations?
   tar_target(sim_nums,
-             5), ### --> 10
+             5), 
   tar_target(sd_recruitment,
              0.75),
   # Fraction of lifetime egg production (FLEP)
   # Lower FLEPs correspond to populations that have experienced higher exploitation
-  # 0.3 is close to population collapse, so 0.4 is close enough to get cohort resonance
+  # 0.3 is close to population collapse, 0.4 is close enough to get cohort resonance
   tar_target(flep_ratios,
              c(seq(0.2, 0.975, by = 0.025), 0.998)),
   tar_target(reserve_fracs,
@@ -244,27 +236,13 @@ list(
     larvpool_disp_conn_mat %>% purrr::map(., ~ matrix(.x[, 1], nrow = 2))
   ),
   # Environmental noise
-  # need to make n_sims number of noise signals for enso and white
-  # tar_target(noises_white,
-  #            "white"),
   tar_target(noises_white_135,
                         "white_135"),
-  # tar_target(noises_enso,
-  #            "enso"),
   tar_target(noises_enso_135,
              "mei_135"),
-  # tar_target(white_noise,
-  #            matrix(data = rnorm(n_years * sim_nums, 0, sd_recruitment), 
-  #                   ncol = sim_nums, nrow = n_years, byrow = FALSE)),
   tar_target(white_noise_135,
              matrix(data = rnorm(n_years_135 * sim_nums, 0, sd_recruitment), 
                     ncol = sim_nums, nrow = n_years, byrow = FALSE)),
-  # tar_target(
-  #   pre_enso_noise,
-  #   make_sim_enso(sim_enso_len = n_years, n_enso_sims = 100)
-  # ),
-  # tar_target(enso_noise,
-  #            sd_recruitment * pre_enso_noise),
   tar_target(enso_dat_135,
              make_ann_mei_ext()),
   tar_target(
@@ -278,11 +256,6 @@ list(
       ) * sd_recruitment}
      out
     }
-    # make_sim_ann_mei_ext(
-    #   mei = enso_dat_135$mei,
-    #   sim_enso_len = n_years_135,
-    #   n_enso_sims = 500
-    # ) * sd_recruitment
   ),
   ## NEW BASE CASE
   ## SIM ESNO DERIVED 135 YR MEI
@@ -292,34 +265,10 @@ list(
   ##-------------------###
   ## SD RECRUIT 0.75  135
   ## NO DISPERSAL ENSO
-  
-  ## OUT TABLES
-  # tar_target(
-  #   dt_no_disp_white_135_75,
-  #   make_sim_dt2(sim_nums = sim_nums,
-  #                reserve_fracs_vals = reserve_fracs,
-  #                flep_ratios_vals = flep_ratios,
-  #                sim_years = n_years_135,
-  #                max_age = ,
-  #                check=FALSE)
-  #   make_sim_dt2(
-  #     exp_names = exp_names_nd,
-  #     species_names = species_names,
-  #     bev_holt_alphas = bev_holt_alphas,
-  #     sd_recruitment = sd_recruitment,
-  #     reserve_fracs = reserve_fracs,
-  #     flep_ratios = flep_ratios,
-  #     noises = noises_white_135,
-  #     sim_nums = sim_nums
-  #   ),
-  #   format = "qs"
-  # ),
-  
-  ## SIMULATION DATA TABLES
+  ## SIMULATION RUNS
   tar_target(
     out_no_disp_white_135_75,
     run_sims_sm_write(
-      # dt = dt_no_disp_white_135_75,
       expmts = exp_names_nd,
       spec_name = species_names,
       alpha_bh = bev_holt_alphas,
@@ -347,30 +296,10 @@ list(
   ),
   ## SD RECRUIT 0.75  135
   ## NO DISPERSAL ENSO
-  
-  
-  ## OUT TABLES
-  # tar_target(
-  #   dt_no_disp_enso_135_75,
-  #   make_sim_dt2(
-  #     exp_names = exp_names_nd,
-  #     species_names = species_names,
-  #     bev_holt_alphas = bev_holt_alphas,
-  #     sd_recruitment = sd_recruitment,
-  #     reserve_fracs = reserve_fracs,
-  #     flep_ratios = flep_ratios,
-  #     noises = noises_enso_135,
-  #     sim_nums = sim_nums
-  #   ),
-  #   format = "qs"
-  # ),
-  
-  
-  ## SIMULATION DATA TABLES
+  ## SIMULATION RUNS
   tar_target(
     out_no_disp_enso_135_75,
     run_sims_sm_write(
-      # dt = dt_no_disp_enso_135_75,
       expmts = exp_names_nd,
       spec_name = species_names,
       alpha_bh = bev_holt_alphas,
@@ -399,28 +328,10 @@ list(
   
   ## SD RECRUIT 0.75  135
   ## LARVAL POOL WHITE
- 
- ## OUT TABLES
-  # tar_target(
-  #   dt_lp_white_135_75,
-  #   make_sim_dt2(
-  #     exp_names = exp_names_lp,
-  #     species_names = species_names,
-  #     bev_holt_alphas = bev_holt_alphas,
-  #     sd_recruitment = sd_recruitment,
-  #     reserve_fracs = reserve_fracs,
-  #     flep_ratios = flep_ratios,
-  #     noises = noises_white_135,
-  #     sim_nums = sim_nums
-  #   ),
-  #   format = "qs"
-  # ),
- 
-  ## SIMULATION DATA TABLES
+  ## SIMULATION RUNS
   tar_target(
     out_lp_white_135_75,
     run_sims_sm_write(
-      # dt = dt_lp_white_135_75,
       expmts = exp_names_lp,
       spec_name = species_names,
       alpha_bh = bev_holt_alphas,
@@ -449,28 +360,10 @@ list(
   
   ## SD RECRUIT 0.75  135
   ## LARVAL POOL ENSO
-  
- ## OUT TABLES
-  # tar_target(
-  #   dt_lp_enso_135_75,
-  #   make_sim_dt2(
-  #     exp_names = exp_names_lp,
-  #     species_names = species_names,
-  #     bev_holt_alphas = bev_holt_alphas,
-  #     sd_recruitment = sd_recruitment,
-  #     reserve_fracs = reserve_fracs,
-  #     flep_ratios = flep_ratios,
-  #     noises = noises_enso_135,
-  #     sim_nums = sim_nums
-  #   ),
-  #   format = "qs"
-  # ),
- 
-  ## SIMULATION DATA TABLES
+  ## SIMULATION RUNS
   tar_target(
     out_lp_enso_135_75,
     run_sims_sm_write(
-      # dt = dt_lp_enso_135_75,
       expmts = exp_names_lp,
       spec_name = species_names,
       alpha_bh = bev_holt_alphas,
@@ -495,39 +388,9 @@ list(
     format = "qs",
     memory = "transient",
     garbage_collection = TRUE
-  ),
-  
-  ##### calcs for plotting  #####
-  ## CONTOUR and GRADIENT VECTROR PLOTS
-  ## Blue rockfish
-  tar_target(
-    brf_fleps_2_fs,
-    get_fs_from_fleps(
-      species = "Blue rockfish",
-      flep_inds = species_flep_fished_ind,
-      f_vals = fishing_mortality_values
-    )
-  ),
-  ## Cabezon
-  tar_target(
-    cab_fleps_2_fs,
-    get_fs_from_fleps(
-      species = "Blue rockfish",
-      flep_inds = species_flep_fished_ind,
-      f_vals = fishing_mortality_values
-    )
-  ),
-  ## China rockfish
-  tar_target(
-    chr_fleps_2_fs,
-    get_fs_from_fleps(
-      species = "China rockfish",
-      flep_inds = species_flep_fished_ind,
-      f_vals = fishing_mortality_values
-    )
-  ))
+  )
+ )
 
-# tar_make(callr_function = callr::r_bg)
    
 ###-----------------------###
 ###-----------------------###

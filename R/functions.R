@@ -1,5 +1,4 @@
-#' functions. R
-
+# functions.R
 
 #'
 #' @title load life history and fishery parameters for California 'fish' species
@@ -307,220 +306,25 @@ list_lep <- function(spec_names, sim_spec_der_var) {
   return(lifetime_eggs_production)
 }
 
+#' Downloads and processes annual MEI data from NOAA
 #'
-#' @title make a species specific Leslie matrix for each patch at a specified
-#' level of FLEP (e.g., fishing mortality)
+#' @description
+#' This function downloads the extended Multivariate ENSO Index (MEI) data
+#' from the NOAA Physical Sciences Laboratory website, processes it into an
+#' annual time series, and adds a column for ENSO phase based on MEI values.
 #'
-#' @description creates a matrix (or array -- one matrix for each patch) that contains
-#' age-specific fecundity values on the first row and survival from age a-1 to
-#' age a on the sub-diagonal (a Leslie matrix)
+#' @return
+#' A data frame with columns:
+#'   - year: The year (integer).
+#'   - mei: The annual average MEI value (numeric).
+#'   - phase: The ENSO phase, either "0" for negative MEI or "1" for positive MEI (character).
 #'
-#' @return returns a Leslie matrix (or multiple Leslie matrices as an array, with
-#' one matrix for each patch)
+#' @note
+#' This function relies on an external website for data access and may be
+#' affected by changes to the website's structure or data format.
 #'
-#' @param num_patches the number of patches included in the model
-#' @param surv_fished_matrix a matrix of cumulative
-#' survival to each age at many levels of fishing mortality
-#' @param surv_fished_ind index of the column that corresponds the survival vector for a
-#' given level of fishing (or FLEP - the fraction of lifetime egg production)
-#' @param age_max numeric the value of the maximum age for a selected species
-#' @param fecundity_at_age vector of fecundity (number of eggs produced) at each age
-#'
-#' @examples
-#'
-#' les_mat_cbzn_F0 <- make_leslie_mat(num_patches = 1,
-#'                                    surv_fished_matrix = derived_vars_cbzn$surv_fished,
-#'                                    surv_fished_ind = 1,
-#'                                    age_max = lh_parms_cbzn$A_max,
-#'                                    fecundity_at_age = derived_vars_cbzn$fecundity_at_age
-#'                                    )
-#' les_mat_cbzn_FLEP40 <- make_leslie_mat(num_patches = 1,
-#'                                        surv_fished_matrix = derived_vars_cbzn$surv_fished,
-#'                                        surv_fished_ind = flep_ind_cbzn_40,
-#'                                        age_max = lh_parms_cbzn$A_max,
-#'                                        fecundity_at_age = derived_vars_cbzn$fecundity_at_age
-#'                                        )
-#'
-
-make_leslie_mat <- function(num_patches = 1,
-                            surv_fished_mat,
-                            surv_fished_ind,
-                            age_max,
-                            fecundity_at_age) {
-  leslie_matrix <-
-    array(0, dim = c(age_max, age_max, num_patches)) # create a 3D array to contain Leslie matrices for each "patch"
-  for (i in 1:num_patches) {
-    leslie_matrix[2:age_max, 1:(age_max - 1), i] <-
-      diag(surv_fished_mat[, surv_fished_ind[i]])
-    leslie_matrix[1, , i] <-
-      fecundity_at_age # add in fecundities on top row
-  }
-  
-  return(leslie_matrix)
-}
-
-
-#'
-#' @title run age-structured model simulations
-#'
-#' @description project model populations that use a (multi-patch) Leslie matrix with
-#' Beverton-Holt density dependence for a given species at a specified level
-#' of FLEP (e.g., fishing mortality)
-#'
-#' @return a list of an array numbers at age (Ns) and matrix of recruits (R) and
-#' eggs produced (Eggs)
-#'
-#' @param t_steps number - number of time steps in the simulations
-#' @param num_patches number - number of patches (e.g., if 2 --> in and out of MPA)
-#' @param les_mat array - an A_max X A_max X num_patches array of Leslie matrices
-#' @param N array -  an A_max X t_steps X num_patches array to store simulation results
-#' @param Cmat matrix - an num_patches X num_patches matrix to map Recruit contribution among patches. Diagonal means no dispersal among patches
-#' @param alpha number - slope of SR curve at the origin
-#' @param beta number - maximum density of recruits. A scaling/carrying capacity parameter
-#' @param rec_sd number - standard deviation of recruitment variation
-#' @param E matrix - an num_patches X t_steps matrix to store the (deterministic) number of eggs from Les matrix calcs
-#' @param R matrix - an num_patches X t_steps matrix to store the (stochastic) number of recruits based on SR relationship
-#'
-#' @examples
-#' results_cbzn_F0_2patch <- run_patch_sims(t_steps = ts, num_patches = nrow(Cmat2),
-#'                                          les_mat = les_mat_cbzn_F0_F30,
-#'                                          con_mat = Cmat2,
-#'                                          N = N_cbzn_F0_F30,
-#'                                          alpha = alpha_cbzn,
-#'                                          beta = beta,
-#'                                          noise = 'white',
-#'                                          noise_series = white_noise
-#'                                          )$Ns
-#'
-
-# t_steps = n_years
-# num_patches = num_patches
-# les_mat = leslie_matrices[["Blue rockfish"]]
-# con_mat = connectivity_matrices[[3]]
-# N = sim_results_arrays[["Blue rockfish"]]
-# selectivity = sim_species_derived_vars[["Blue rockfish"]][["F_select"]]
-# fishing_mortality = c(0, fishing_mortality_values[species_flep_fished_ind[["Blue rockfish"]]])
-# weight_at_age = sim_species_parms[["Blue rockfish"]][["biom_const"]] *  sim_species_derived_vars[["Blue rockfish"]][["length_at_age"]] ^
-#   sim_species_parms[["Blue rockfish"]][["biom_exp"]]
-# alpha = bev_holt_alphas[["Blue rockfish"]]
-# beta = bev_holt_beta
-# noise_series = white_noise
-#
-# natural_mortality <- sim_species_parms[["Blue rockfish"]][["M"]]
-
-run_patch_sims <- function(t_steps,
-                           num_patches,
-                           les_mat,
-                           con_mat,
-                           frac_in_out,
-                           N,
-                           selectivity,
-                           fishing_mortality,
-                           natural_mortality,
-                           weight_at_age,
-                           alpha,
-                           beta,
-                           noise_series) {
-  Z <- natural_mortality + fishing_mortality
-  E <- matrix(0, nrow = num_patches, ncol = t_steps) # eggs
-  R <- E
-  Y <- array(data = NA, dim = dim(N) - c(1, 0, 0))
-  # harvest_rate_at_age <- selectivity * (1 - exp(-fishing_mortality))
-  
-  # loop over time
-  for (t in 2:t_steps) {
-    # loop over patches
-    for (n in 1:num_patches) {
-      catch_at_age <-
-        selectivity * (1 - exp(-fishing_mortality[n])) * (fishing_mortality[n] / (natural_mortality + fishing_mortality[n]))
-      N[, t, n] <-
-        les_mat[, , n] %*% N[, t - 1, n] # advance the population
-      Y[, t, n] <- # 2021-11-17 - check yield
-        N[1:(length(weight_at_age) - 1), t, n] * catch_at_age * weight_at_age[-(length(weight_at_age))]
-      # N[1:(length(weight_at_age) - 1), t - 1, n] * catch_at_age * weight_at_age[-(length(weight_at_age))]
-      
-      E[n, t] <- N[1, t, n] # pull out the eggs produced
-    }
-    
-    # do larval pool dispersal
-    E[, t] <-  con_mat %*% E[, t]
-    
-    # Apply density dependence
-    for (n in 1:num_patches) {
-      R[n, t] <-
-        ((alpha * E[n, t]) / (1 + (alpha / (
-          beta * frac_in_out[n]
-        ))  * E[n, t])) * exp(noise_series[t])
-      
-      N[1, t, n] <-
-        R[n, t] # add the actual surviving recruits back in
-    }
-  }
-  return(list(
-    Ns = N,
-    Recs = R,
-    Eggs = E,
-    Y = Y
-  ))
-}
-
-
-
-read_clean_enso <-
-  function(fp = file.path("data", "enso_sst.indices.txt")) {
-    enso_df <- read.table(fp ,
-                          header = TRUE)
-    enso_df <- enso_df %>%
-      mutate(Time = enso_df$YR + enso_df$MON / 12,
-             Pos = enso_df$ANOM.1 >= 0)
-    return(enso_df)
-  }
-
-make_sim_enso <- function(sim_enso_len = 1012,
-                          n_enso_sims = 100) {
-  enso_data_fp <-
-    file.path("data", "enso_sst.indices.txt")
-  
-  enso_df <- read.table(enso_data_fp, header = TRUE)
-  
-  enso_df <- enso_df %>%
-    mutate(Time = enso_df$YR + enso_df$MON / 12,
-           Pos = enso_df$ANOM.1 >= 0)
-  
-  ann_enso_data <- enso_df %>%
-    group_by(YR) %>%
-    summarise(ann_enso = mean(ANOM.1))
-  
-  enso_ts <- ann_enso_data$ann_enso
-  sim_enso_matrix <- matrix(0,
-                            nrow = length(enso_ts),
-                            ncol = n_enso_sims)
-  # create a time series by concatenating several fft + rand theta + ifft
-  # and then pick a random starting point in the series
-  for (i in 1:n_enso_sims) {
-    theta <-
-      runif(n = length(enso_ts)) * 2 * pi # 2pi converts to radians
-    # Now do inverse FFT with modulus (real part) of original FFT but randomized phase
-    Z <- Re(fft(enso_ts)) * exp(1i * theta)
-    Z <- scale(Re(fft(Z, inverse = TRUE)))
-    # ifelse(sim_enso <= 0, 0, sim_enso)
-    sim_enso_matrix[, i] <- Z #sim_enso
-  }
-  # concatenate matrix by columns
-  sim_enso_matrix <- c(sim_enso_matrix)
-  # pick random starting point
-  start_ind <-
-    sample(
-      x = 1:(length(sim_enso_matrix) - sim_enso_len),
-      size = 1,
-      replace = FALSE
-    )
-  # select output series
-  sim_enso_ts <-
-    sim_enso_matrix[start_ind:(start_ind + sim_enso_len - 1)]
-  return(sim_enso_ts)
-}
-
+#' @references
+#' NOAA Physical Sciences Laboratory, Multivariate ENSO Index (MEI): https://psl.noaa.gov/enso/mei/
 #### USED
 make_ann_mei_ext <- function() {
   
@@ -555,6 +359,22 @@ make_ann_mei_ext <- function() {
   return(mei_df)
 }
 
+#' Generates a simulated annual MEI time series based on phase randomization
+#'
+#' @description
+#' This function generates a simulated annual MEI (Multivariate ENSO Index)
+#' time series of a specified length, using the phase randomization method.
+#' It creates multiple simulations by randomizing the phases of the original
+#' MEI data's Fourier transform, then concatenates them and selects a random
+#' segment of the desired length.
+#'
+#' @param mei A numeric vector representing the original MEI time series.
+#' @param sim_enso_len The desired length of the simulated MEI time series.
+#' @param n_enso_sims The number of individual phase-randomized simulations to
+#'   create before concatenation (default is 500).
+#'
+#' @return
+#' A numeric vector representing the simulated MEI time series.
 #### USED
 make_sim_ann_mei_ext <- function(mei,
                                  sim_enso_len,
@@ -572,7 +392,6 @@ make_sim_ann_mei_ext <- function(mei,
     # Now do inverse FFT with modulus (real part) of original FFT but randomized phase
     Z <- Re(fft(mei)) * exp(1i * theta)
     Z <- scale(Re(fft(Z, inverse = TRUE)))
-    # ifelse(sim_enso <= 0, 0, sim_enso)
     sim_mei_matrix[, i] <- Z #sim_enso
   }
   # concatenate matrix by columns
@@ -590,468 +409,38 @@ make_sim_ann_mei_ext <- function(mei,
   return(sim_mei_ts)
 }
 
-fft_abund <- function(mat) {
-  X <- colSums(mat[7:25, 101:1e3])
-  X <- detrend(X)
-  Y <- fft(X)
-  Y <- abs(Re(Y[1:(floor(length(Y)) / 2)]))
-  Freq <- 1
-  fs <- Freq * (0:(floor((length(
-    X
-  ) - 1) / 2))) / length(X)
-  return(data.frame(fs = fs,
-                    Y = Y))
-}
-
-plot_fft_abund <- function(dat) {
-  ggplot(dat, aes(x = 1 / fs, y = Y ^ 2)) +
-    geom_line() +
-    xlim(0, 100) +
-    theme_bw()
-}
-
-
-customFR2ts <- function(N, # number of time steps
-                        reps,
-                        r_seed = 1,
-                        amp) {
-  # LWB notes on generating time series with a specific
-  # So, if you want to create white noise (equal variance at all frequencies)
-  # you should generate a sine wave of frequency .1, .2, .3,....up to the maximum frequency you want,
-  # then give each one a phase picked from a uniform distribution between 0 and 2 pi,
-  # then add them together and divide by whatever it takes to get the variance you want.
-  #
-  # If you instead want to create a series to which salmon would be sensitive do not make
-  # all of the sine waves the same amplitude, rather make the sine waves near 1/(generation time)
-  # larger than the others somehow.  One way to do that would be to make them have the a Gaussian shape.
-  #
-  # Make sense?
-  
-  t <- 1:N # time index
-  f <- (1:(N / 2)) / N # frequencies from 1/N to 0.5
-  tsReps <- matrix(NA, nrow = N, ncol = reps)
-  set.seed(r_seed)
-  for (h in 1:reps) {
-    rtheta <-
-      runif(length(f), 0, 2 * pi) # the random phases to apply to each frequency
-    ts <- matrix(NA, nrow = N, ncol = length(f))
-    for (i in 1:length(f)) {
-      if (length(amp) == 1) {
-        ts[, i] <- amp * cos(2 * pi * f[i] * t - rtheta[i])
-      } else {
-        ts[, i] <- amp[i] * cos(2 * pi * f[i] * t - rtheta[i])
-      }
-    }
-    
-    noise <- rowSums(ts) # add up the curves
-    noise <-
-      (noise - mean(noise, na.rm = TRUE)) / sd(noise, na.rm = TRUE) # mean = 0, sd of 1
-    tsReps[, h] <- noise
-  }
-  return(tsReps)
-  
-} # end of customFR2ts
-
-ampf <- function(dat, N, span_num) {
-  # freq, gps
-  data_pgram <- spec.pgram(x = dat,
-                           spans = c(span_num, span_num),
-                           plot = FALSE)
-  freq <- data_pgram$freq # Corresponding period information
-  gps <- data_pgram$spec # change the name for use in ampf()
-  appFR <- approxfun(freq, gps)
-  amp <-
-    curve(
-      appFR(x),
-      from = min(freq),
-      to = 0.5,
-      n = N,
-      type = "l"
-    )$y
-  # there should be no missing values resulting from extrapolating beyond range of data
-  #amp[is.na(amp)] <- 0 #  NAs are a problem when calling customFRts - multiplication by NA -> error
-  return(amp)
-}
-
-
-# ampf <- function(dat, N) {
-#   # freq, gps
-#   data_pgram <- spec.pgram(x = dat,
-#                            spans = c(11, 11),
-#                            plot = FALSE)
-#   freq <- data_pgram$freq # Corresponding period information
-#   gps <- data_pgram$spec # change the name for use in ampf()
-#   appFR <- approxfun(freq, gps)
-#   amp <-
-#     curve(
-#       appFR(x),
-#       from = min(freq),
-#       to = 0.5,
-#       n = N,
-#       type = "l"
-#     )$y
-#   # there should be no missing values resulting from extrapolating beyond range of data
-#   #amp[is.na(amp)] <- 0 #  NAs are a problem when calling customFRts - multiplication by NA -> error
-#   return(amp)
-# }
-
-
-sim_enso_f <- function(df_col,
-                       N = 100,
-                       reps = 10,
-                       rseed = 11) {
-  out_enso <- customFR2ts(
-    N = N,
-    # number of time steps
-    reps = reps,
-    r_seed = rseed,
-    amp = ampf(dat = df_col, N = N)
-  )
-  return(out_enso)
-}
-
-spans_val <- function(t) {
-  stopifnot(!is.na(t))
-  stopifnot(is.numeric(t))
-  stopifnot(t > 0)
-  st_val <- ceiling(sqrt(max(t)))
-  if (st_val %% 2 == 0) {
-    span_val <- st_val + 1
-    return(c(span_val, span_val))
-  }
-  return(c(st_val, st_val))
-}
-
-syn_ts_from_spec <- function(dts,
-                             amp_func,
-                             ts_len,
-                             r_seed = 5) {
-  set.seed(r_seed)
-  
-  stopifnot(ts_len > 4)
-  
-  t <- 1:ts_len # index
-  
-  stopifnot(!is.na(t))
-  stopifnot(is.numeric(t))
-  stopifnot(t > 0)
-  
-  f <- seq(1, max(t) / 2, length = max(t)) # frequencies
-  
-  is.function(amp_func)
-  
-  amp <- amp_func(dat = dts,
-                  span_num = 8,
-                  N = length(f))
-  # amp <- amp_func(dat = dts, span_num = spans_val(length(dts)), N = length(f))
-  
-  stopifnot(length(amp) == length(f)) # check that ampf_func output is correct length
-  
-  fs <- max(t) # sampling frequency same as fast as 0.5
-  
-  dat <- matrix(data = 0,
-                nrow = max(t),
-                ncol = length(f))
-  
-  for (i in 1:length(f)) {
-    # scale each sine of freq f by the desired amp and assign a random phase
-    dat[, i] <-
-      amp[i] * sin(2 * pi * f[i] / fs * t - runif(length(f), 0, 2 * pi))
-  }
-  ts <- rowSums(dat)
-  ts <- (ts - mean(ts)) / sd(ts)
-  print("ts is of class: ")
-  print(class(ts))
-  return(ts)
-}
-
-make_one_over_f_gamma <- function(gamma_coef, ts_len, sd_mult) {
-  bn <- primer::one_over_f(gamma = gamma_coef, N = ts_len)
-  return(sd_mult * (bn / sd(bn)))
-}
-
-plotMeanFreqR <- function(dataMat, N) {
-  # spectral frequency
-  if (trunc(sqrt(N)) %% 2 == 0) {
-    m <- trunc(sqrt(N)) + 1
-  } else {
-    m <- trunc(sqrt(N))
-  }
-  
-  spcMean <- matrix(NA, nrow = N / 2, ncol = ncol(dataMat))
-  
-  freq <- (1:(N / 2)) / N
-  for (i in 1:ncol(dataMat)) {
-    ifelse(
-      all(dataMat[, i] == 0),
-      spcMean[, i] <- rep(NA, times = N / 2),
-      spcMean[, i] <-
-        spec.pgram(scale(dataMat[, i]), plot = F, c(m, m))$spec
-    )
-  }
-  mean_spc <- rowMeans(spcMean, na.rm = TRUE)
-  
-  spc10 <- apply(spcMean,
-                 1,
-                 quantile,
-                 probs = c(0.1),
-                 na.rm = TRUE)
-  spc25 <-
-    apply(spcMean,
-          1,
-          quantile,
-          probs = c(0.25),
-          na.rm = TRUE)
-  spc75 <-
-    apply(spcMean,
-          1,
-          quantile,
-          probs = c(0.75),
-          na.rm = TRUE)
-  spc90 <- apply(spcMean,
-                 1,
-                 quantile,
-                 probs = c(0.9),
-                 na.rm = TRUE)
-  
-  spec_data <- data.frame(
-    freqs = freq,
-    mean_spec = mean_spc,
-    spec_10 = spc10,
-    spec_25 = spc25,
-    spec_75 = spc75,
-    spec_90 = spc90
-  )
-  
-  p <- ggplot(data = spec_data,
-              aes(x = freqs, y = mean_spec)) +
-    xlab("Frequency") +
-    ylab("Relative Magnitude") +
-    theme_bw() +
-    geom_ribbon(aes(ymin = spec_10, ymax = spec_90), fill = "lightgrey") +
-    geom_ribbon(aes(ymin = spec_25, ymax = spec_75), fill = "darkgrey") +
-    geom_line(colour = "black", size = 1) +
-    geom_line(colour = "white", size = .7) +
-    geom_line(linetype = 2, size = .7)
-  
-  return(p)
-}
-
-
+#' Extracts fishing mortality (F) values for specific FLEP ratios for a given species
 #'
-#' @title create 'custom' time series with specific frequency content via inverse FFT
-#' @description Create 'custom' time series with a specified frequency content
-#' to mimic real-world non-white (often reddened) environmental time series
-#' (e.g., ENSO). This function uses the inverse FFT to create the time series.
-#' The number of time series data created are specifed via the `n_reps` argument
-#' The length of the time series created is the same as the input time series.
-#' (This should be updated so that created time series can be of any length).
-#' Returns a matrix with the number of rows equal to the length of the created
-#' time series and the number of columns equal to `n_reps`.
+#' @description
+#' This function extracts fishing mortality (f) values from a vector of f
+#' values for specific FLEP ratios associated with a given species. It creates
+#' a data frame with the extracted FLEP ratios, F values, and character
+#' representations of the FLEP ratios.
 #'
-#' @return Returns a matrix with the number of rows equal to the length of the created
-#' time series and the number of columns equal to `n_reps`.
-#' @param dts the time series to mimic with respect to frequency content
-#' @param n_reps the number of mimic time series to create
-#' @param scale_sd standard deviation of the resulting time series, default value 1
-#' @param scale_mean mean  of the resulting time series, default value 0
-#' @param r_seed specify random seed for reproducibility
+#' @param species The species name (string).
+#' @param flep_inds A list of lists, where each inner list represents the indices
+#'   of FLEP ratios associated with a species.
+#' @param f_vals A vector of fishing mortality values for all FLEP ratios.
 #'
-#' @examples
+#' @return
+#' A DataFrame with columns:
+#'   - flep_vals: The FLEP ratio values (numeric).
+#'   - f_vals: The corresponding fishing mortality values (numeric).
+#'   - flep_vals_ch: The FLEP ratio values as characters (string).
 #'
-#' customFR2ts_ifft(dts = rnorm(1000, 0, 1), n_reps = 10, scale_sd = 3, scale_mean = 2, r_seed = 11)
-#'
-
-customFR2ts_ifft <- function(dts,
-                             tot_sim_len,
-                             scale_sd = 1,
-                             # n_years,
-                             scale_mean = 0,
-                             r_seed = 11) {
-  # require(pracma)
-  set.seed(r_seed)
-  ts_len <- length(dts)
-  n_reps <- ceiling(1012 / ts_len)
-  sim_ts_matrix <- matrix(NA, nrow = ts_len, ncol = n_reps)
-  #simulated ffts all saved in one column
+#' @note
+#' This function assumes that the input data structures are correctly formatted
+#' and that the species name is present in the `flep_inds` list.
+#### USED
+get_fs_from_fleps <- function(species,
+                              flep_inds,
+                              f_vals) {
+  fleps_2_fs <-
+    data.frame(flep_vals = as.numeric(names(flep_inds[[species]])),
+               f_vals = f_vals[as.numeric(flep_inds[[species]])])  %>%
+    mutate(flep_vals_ch = as.character(flep_vals))
   
-  for (j in 1:n_reps) {
-    # We do this by randomizing the phase (imaginary part) of the FFT spectrum
-    Theta <-
-      runif(n = ts_len) * 2 * pi # 2pi converts to radians
-    # Now do inverse FFT with modulus (real part) of original FFT but randomized phase
-    Z <- Re(fft(dts)) * exp(1i * Theta)
-    # Z <- Re(ifft(Z))
-    Z <- Re(fft(Z, inverse = TRUE) / length(Z))
-    sim_ts <-  as.vector(Z * scale_sd + scale_mean)
-    
-    sim_ts_matrix[, j] <- sim_ts
-  }
-  return(sim_ts_matrix)
-  # return(c(sim_ts_matrix)[1:tot_sim_len])
-}
-
-
-
-#'
-#' @title Age-structured population model parameters
-#' @description Store life history parameters used in age-structured models for
-#' multiple species.
-#' @return A list/matrix/data.frame containing
-#' @param species species name
-#' @param Amax maximum age
-#' @param Amat age of 50% maturity
-#' @param Afish age of entry to fishery
-#' @param M natural mortality
-#' @param k von Bertalanffy rate parameter
-#' @param Linf von Bertalanffy asymptotic length
-#' @param fec_a multiplicative
-#' @param fec_b = 3
-#' @examples
-#' two_patch_life_history_parms(species = "cobia", Amax = 15, Amat = 2,
-#'                              Afish = 2, M = 0.2, k = 0.1, Linf = 200,
-#'                              fec_a = 1, fec_b = 3)
-#'
-two_patch_life_history_parms <- function(species = "fake",
-                                         Amax = 50,
-                                         Amat = 5,
-                                         Afish = 6,
-                                         M = 0.2,
-                                         k = 0.1,
-                                         Linf = 100,
-                                         fec_a = 1,
-                                         fec_b = 3) {
-  
-}
-
-
-
-egg_rec_calcs <-
-  function(func,
-           container,
-           species,
-           metric = c("Recs", "Eggs"),
-           burn_in_len,
-           f_vals) {
-    fs_0_max <- f_vals[1:length(container[[species]])]
-    drop_burn_in <- 1:burn_in_len
-    out <- 1:length(fs_0_max) %>%
-      purrr::map_dbl(., ~ func(container[[species]][[.x]][[metric]][-drop_burn_in]))
-    names(out) <- paste0("F_", fs_0_max)
-    return(out)
-  }
-
-yield_numbers_calcs <-
-  function(func,
-           container,
-           species,
-           metric = c("Ns", "Y"),
-           burn_in_len,
-           f_vals) {
-    fs_0_max <- f_vals[1:length(container[[species]])]
-    drop_burn_in <- 1:burn_in_len
-    out <- 1:length(fs_0_max) %>%
-      purrr::map_dbl(., ~ {
-        dat <-
-          colSums(container[[species]][[.x]][[metric]][, -drop_burn_in, 1], na.rm = TRUE)
-        func(dat)
-      })
-    names(out) <- paste0("F_", fs_0_max)
-    return(out)
-  }
-
-
-
-plot_mean_sd_cv <-
-  function(metric,
-           species,
-           fs,
-           means,
-           sds,
-           cvs,
-           cols = "darkgrey",
-           width = 1.5) {
-    if (length(cols) == 1) {
-      cols <- rep(cols, 3)
-    } else if (length(cols) == 3) {
-      pass
-    } else {
-      stop("colors should be a vector of length 1 or 3")
-    }
-    old <- par(
-      mfrow = c(3, 1),
-      mar = c(3, 3, 1, 1),
-      mgp = c(1.5, 0.5, 0),
-      tck = -0.02,
-      cex.lab = 1.65,
-      cex.axis = 1.35,
-      cex.main = 1.8
-    )
-    plot(
-      fs,
-      means,
-      type = "l",
-      col = cols[1],
-      xlab = "",
-      ylab = paste0("Mean ", metric),
-      main = paste0("Species: ", species)
-    )
-    plot(
-      fs,
-      sds,
-      type = "l",
-      col = cols[2],
-      xlab = "",
-      ylab = paste0("Standard deviation ", metric)
-    )
-    plot(
-      fs,
-      cvs,
-      type = "l",
-      col = cols[3],
-      ylab = paste0("CV ", metric),
-      xlab = "Fishing mortailty"
-    )
-    par(old)
-  }
-
-
-make_sim_storage_list <- function(sp_names = "Cabezon",
-                                  n_runs = 1,
-                                  flep_vals = seq(0.3, 0.8, by = 0.05),
-                                  frac_vals = c(seq(0, 0.3, by = 0.02), 1)) {
-  # check that sp_names are valid
-  n_species <- length(sp_names)
-  species_list <-  vector("list", length = n_species)
-  names(species_list) <- sp_names
-  
-  # number of runs: n_runs <- 1
-  
-  run_list <- vector("list", length = n_runs)
-  names(run_list) <- 1:n_runs
-  
-  # (number of) fleps: seq(0.3, 0.8, by = 0.05)
-  n_fleps <- length(flep_vals)
-  flep_list <- vector("list", length = n_fleps)
-  names(flep_list) <- flep_vals
-  
-  # fracs of coastline: c(seq(0, 0.3, by = 0.02), 1)
-  
-  n_fracs <- length(frac_vals)
-  frac_list <- vector("list", length = n_fracs)
-  names(frac_list) <- frac_vals
-  
-  for (i in 1:n_species) {
-    for (j in 1:n_runs) {
-      for (k in 1:n_fleps) {
-        flep_list[[k]] <- frac_list
-      }
-      run_list[[j]] <- flep_list
-    }
-    species_list[[i]] <- run_list
-  }
-  
-  return(species_list)
+  return(fleps_2_fs)
 }
 
 
@@ -1257,432 +646,32 @@ set_sim_results_arrays <- function(sp_names,
   return(sim_arrays)
 }
 
-# make_sim_dt <- function(exp_names,
-#                         species_names,
-#                         bev_holt_alphas,
-#                         sd_recruitment,
-#                         reserve_fracs,
-#                         flep_ratios,
-#                         noises,
-#                         sim_nums) {
-#   # Steps to pre-populate data.table before simulation runs.
-#   
-#   num_alphas_per_species <-
-#     length(bev_holt_alphas) / length(species_names)
-#   
-#   # Create variables that define model experiment and experimental parameters
-#   exp_names_vals <-
-#     rep(
-#       exp_names,
-#       each = length(species_names) * num_alphas_per_species * length(sd_recruitment) * length(reserve_fracs) * length(flep_ratios) * length(noises) * sim_nums
-#     )
-#   
-#   sp_names_vals <-
-#     rep(
-#       species_names,
-#       each = num_alphas_per_species * length(sd_recruitment) * length(reserve_fracs) * length(flep_ratios) * length(noises) * sim_nums,
-#       times = length(exp_names)
-#     )
-#   
-#   bev_holt_alphas_vals <-
-#     rep(
-#       bev_holt_alphas,
-#       each = length(sd_recruitment) * length(reserve_fracs) * length(flep_ratios) * length(noises) * sim_nums,
-#       times = length(exp_names) * num_alphas_per_species
-#     )
-#   
-#   rec_sd_vals <-
-#     rep(
-#       sd_recruitment,
-#       each = length(reserve_fracs) * length(flep_ratios) * length(noises) * sim_nums,
-#       times = length(exp_names) * length(species_names) * num_alphas_per_species
-#       
-#     )
-#   
-#   reserve_fracs_vals <-
-#     rep(
-#       reserve_fracs,
-#       each = length(flep_ratios) * length(noises) * sim_nums,
-#       times = length(exp_names) * length(species_names) * num_alphas_per_species * length(sd_recruitment)
-#     )
-#   
-#   flep_ratios_vals <-
-#     rep(
-#       flep_ratios,
-#       each = length(noises) * sim_nums,
-#       times = length(exp_names) * length(species_names) * num_alphas_per_species * length(sd_recruitment) *
-#         length(reserve_fracs)
-#     )
-#   
-#   noises_vals <-
-#     rep(
-#       noises,
-#       each = sim_nums,
-#       times = length(exp_names) * length(species_names) * num_alphas_per_species * length(sd_recruitment) *
-#         length(reserve_fracs) * length(flep_ratios)
-#     )
-#   
-#   sim_nums_vals <-
-#     rep(
-#       1:sim_nums, # sim_nums
-#       times = length(exp_names) * length(species_names) *  num_alphas_per_species * length(sd_recruitment) *
-#         length(reserve_fracs) * length(flep_ratios) * length(noises)
-#     )
-#   
-#   dt <- data.table(
-#     experiment = exp_names_vals,
-#     species = sp_names_vals,
-#     bh_alpha = bev_holt_alphas_vals,
-#     rec_sd = rec_sd_vals,
-#     reserve_frac = reserve_fracs_vals,
-#     flep_ratio = flep_ratios_vals,
-#     noise = noises_vals,
-#     sim_num = sim_nums_vals,
-#     number = vector("list"),
-#     yield = vector("list"),
-#     recruits = vector("list"),
-#     eggs = vector("list")
-#   )
-#   
-#   # setting the key for "fast" indexing of data.table storage
-#   setkeyv(
-#     x = dt,
-#     c(
-#       "experiment",
-#       "species",
-#       "bh_alpha",
-#       "rec_sd",
-#       "reserve_frac",
-#       "flep_ratio",
-#       "noise",
-#       "sim_num"
-#     )
-#   )
-#   return(dt)
-# }
 
 
-make_sim_dt2 <- function(sim_nums,
-                         reserve_fracs_vals,
-                         flep_ratios_vals,
-                         # sim_years,
-                         # max_age,
-                         check=FALSE) {
-  
-  # Steps to pre-populate data.table before simulation runs.
-  
-  sim_nums_vals <- 1:sim_nums
-  # year_vals <- 1:sim_years
-  # patch_vals <- 1:2
-  # age_vals <- 1:max_age
-  
-  num_sims_dt <- rep(
-    sim_nums_vals,
-    each = length(reserve_fracs_vals) * length(flep_ratios_vals) # *  length(year_vals) * max(patch_vals) * length(age_vals)
-  )
-  
-  flep_ratios_dt <- rep(
-    flep_ratios_vals,
-    each = length(patch_vals) * length(age_vals) *  length(year_vals) * length(reserve_fracs_vals) , 
-    times = sim_nums
-  )
-  
-  reserve_fracs_dt <- rep(
-    reserve_fracs_vals,
-    each = length(patch_vals) * length(age_vals) *  length(year_vals), 
-    times = sim_nums * length(flep_ratios_vals) 
-  )
-  
-  # year_vals_dt <- rep(
-  #   year_vals,
-  #   each = length(patch_vals) * length(age_vals),
-  #   times =  sim_nums * length(reserve_fracs_vals) * length(flep_ratios_vals) 
-  # )
-  # 
-  # age_vals_dt <- rep(
-  #   age_vals,
-  #   each = length(patch_vals),
-  #   times = sim_nums * length(reserve_fracs_vals) * length(flep_ratios_vals) *  length(year_vals) 
-  # )
-  # 
-  # patch_num_dt <- rep(
-  #   patch_vals,
-  #   times = sim_nums * length(reserve_fracs_vals) * length(flep_ratios_vals) *  length(year_vals) * length(age_vals)
-  # )
-  
-  
-  if (check) {
-    print(table(num_sims_dt))
-    print(table(flep_ratios_dt))
-    print(table(reserve_fracs_dt))
-    print(table(year_vals_dt))
-    print(table(age_vals_dt))
-    print(table(patch_num_dt))
-  }
-  
-  # make the data table
-  dt <- data.table(
-    sim_num = num_sims_dt,
-    reserve_frac = reserve_fracs_dt,
-    flep_ratio = flep_ratios_dt,
-    year = year_vals_dt,
-    age = age_vals_dt,
-    patch_num = patch_num_dt, 
-    number = NA_real_,
-    yield = NA_real_
-  )
-  
-  # setting the key for "fast" indexing of data.table storage
-  setkeyv(
-    x = dt,
-    c(
-      "sim_num",
-      "reserve_frac",
-      "flep_ratio",
-      "year",
-      "age",
-      "patch_num"
-    )
-  )
-  return(dt)
-}
-
-
-
-yield_sp_sim_flep_frac <-
-  function(results_list,
-           sp_names,
-           n_runs,
-           flep_vals,
-           frac_vals,
-           burn,
-           sim_len) {
-    out <- vector("list", length = length(sp_names))
-    for (i in 1:length(species_names)) {
-      out[[i]] <- vector("list", length = length(n_sims))
-      for (j in 1:length(n_sims)) {
-        out[[i]][[j]] <- vector("list", length = length(fleps))
-        for (k in 1:length(fleps)) {
-          out[[i]][[j]][[k]] <- vector("list", length = length(reserve_fracs))
-          for (l in 1:length(reserve_fracs)) {
-            out[[i]][[j]][[k]][[l]] <-
-              colSums(apply(results_list[[i]][[j]][[k]][[l]]$Y, c(1, 2), sum, na.rm = TRUE)[, (burn_in + 1):(n_years)])
-          }
-        }
-      }
-    }
-    return(out)
-  }
-
-numbers_sp_sim_flep_frac <-
-  function(results_list,
-           sp_names,
-           n_runs,
-           flep_vals,
-           frac_vals,
-           burn,
-           sim_len) {
-    out <- vector("list", length = length(sp_names))
-    for (i in 1:length(species_names)) {
-      out[[i]] <- vector("list", length = length(n_sims))
-      for (j in 1:length(n_sims)) {
-        out[[i]][[j]] <- vector("list", length = length(fleps))
-        for (k in 1:length(fleps)) {
-          out[[i]][[j]][[k]] <- vector("list", length = length(reserve_fracs))
-          for (l in 1:length(reserve_fracs)) {
-            out[[i]][[j]][[k]][[l]] <-
-              colSums(apply(results_list[[i]][[j]][[k]][[l]]$Ns, c(1, 2), sum, na.rm = TRUE)[, (burn_in + 1):(n_years)])
-          }
-        }
-      }
-    }
-    return(out)
-  }
-
-
-biomass_sp_sim_flep_frac <-
-  function(results_list,
-           weight_at_age,
-           sp_names,
-           n_runs,
-           flep_vals,
-           frac_vals,
-           burn,
-           sim_len) {
-    out <- vector("list", length = length(sp_names))
-    for (i in 1:length(species_names)) {
-      out[[i]] <- vector("list", length = length(n_sims))
-      waa <- weight_at_age[[i]]
-      for (j in 1:length(n_sims)) {
-        out[[i]][[j]] <- vector("list", length = length(fleps))
-        for (k in 1:length(fleps)) {
-          out[[i]][[j]][[k]] <- vector("list", length = length(reserve_fracs))
-          for (l in 1:length(reserve_fracs)) {
-            out[[i]][[j]][[k]][[l]] <-
-              colSums(apply(results_list[[i]][[j]][[k]][[l]]$Ns * waa, c(1, 2), sum, na.rm = TRUE)[, (burn_in + 1):(n_years)])
-          }
-        }
-      }
-    }
-    return(out)
-  }
-
-
-run_sims <- function(dt,
-                     expmts,
-                     spec_name,
-                     alpha_bh,
-                     beta_bh,
-                     recr_sd,
-                     fleps,
-                     frac_reserves,
-                     noise_vec,
-                     noise_dat,
-                     n_years,
-                     num_sims,
-                     num_patches,
-                     les_mats,
-                     conn_mats,
-                     in_out_fracs,
-                     sim_results,
-                     sim_spec_dervars,
-                     f_vals,
-                     spec_flep_f_ind,
-                     sim_spec_pars) {
-  for (i in 1:length(expmts)) {
-    for (j in 1:length(spec_name)) {
-      for (p in noise_vec) {
-        for (m in 1:length(recr_sd)) {
-          for (n in 1:length(fleps)) {
-            for (o in 1:length(frac_reserves)) {
-              # for (p in noise_vec) {
-              for (q in 1:num_sims) {
-                out <- run_patch_sims2(
-                  t_steps = n_years,
-                  num_patches = num_patches,
-                  les_mat = les_mats[[j]][[n]],
-                  con_mat = conn_mats[[o]],
-                  frac_in_out = in_out_fracs[[o]],
-                  N = sim_results[[j]][[n]],
-                  # this needs the values from a unfished_N1 for each species
-                  selectivity = as.integer(sim_spec_dervars[[j]][["F_select"]]),
-                  fishing_mortality = c(0, f_vals[spec_flep_f_ind[[j]][[n]]]),
-                  natural_mortality = sim_spec_pars[[j]][["M"]],
-                  weight_at_age = sim_spec_pars[[j]][["biom_const"]] * sim_spec_dervars[[j]][["length_at_age"]] ^
-                    sim_spec_pars[[j]][["biom_exp"]],
-                  alpha = alpha_bh[[j]],
-                  beta = beta_bh,
-                  noise_series = noise_dat
-                )
-                
-                out_Ns <-
-                  setnames(
-                    as.data.table(out[["Ns"]]),
-                    old = c("V1", "V2", "V3", "value"),
-                    new = c("age", "year", "patch_num", "number")
-                  )
-                setkeyv(out_Ns, c("age", "year", "patch_num"))
-                
-                out_Y <-
-                  setnames(
-                    as.data.table(out[["Y"]]),
-                    old = c("V1", "V2", "V3", "value"),
-                    new = c("age", "year", "patch_num", "yield")
-                  )
-                setkeyv(out_Y, c("age", "year", "patch_num"))
-                
-                dt[i = .(
-                  expmts[i],
-                  spec_name[j],
-                  alpha_bh[j],
-                  recr_sd[m],
-                  frac_reserves[o],
-                  fleps[n],
-                  p,
-                  num_sims[q]
-                ), j =  `:=` (number = list(out_Ns),
-                              yield = list(out_Y))] #,
-                              # recs = list(out_Recs),
-                              # eggs = list(out_Eggs))]
-                              rm(out_Ns, out_Eggs, out) # out_Recs, out_Y,
-              }
-            }
-          }
-        }
-        
-        print(paste0("dispersal: ", expmts[i], " and species: ", spec_name[j],
-          " and ", p, " noise ", " and recruit sd of ", recr_sd[m]))
-        
-        dt_sub <- dt %>%
-          dplyr::filter(species == spec_name[j]) %>%
-          select(-recruits,-eggs) %>%
-          unnest(c(number, yield), names_repair = "minimal")
-        
-        dt_sub <- dt_sub[!duplicated(as.list(dt_sub))]
-        
-        dt <- dt %>%
-          dplyr::filter(species != spec_name[j])
-        
-        con <-
-          dbConnect(duckdb::duckdb(),
-                    dbdir = "data/sim_out.duckdb",
-                    read_only = FALSE)
-        duckdb::dbWriteTable(con,
-                             paste0(expmts[i], "_", tolower(sub(
-                               " ", "_", spec_name[j]
-                             )), "_", p, "_", substring(as.character(recr_sd[m]), 3)),
-                             dt_sub,
-                             append = TRUE) # FALSE
-
-        DBI::dbDisconnect(con, shutdown = TRUE)
-      }
-    # }
-    # print(paste0("dispersal: ", expmts[i], " and species: ", spec_name[j]))
-    # dt_sub <- dt %>%
-    #   dplyr::filter(experiment == expmts[i], species == spec_name[j]) %>%
-    #   select(-recruits, -eggs) %>%
-    #   unnest(c(number, yield), names_repair = "minimal")
-    #
-    # print(unique(dt_sub$species))
-    # print("Subset data to write successful")
-    #
-    # dt_sub <- dt_sub[!duplicated(as.list(dt_sub))]
-    # print("unnesting data and deduping cols just happend")
-    #
-    # dt <- dt %>%
-    #   dplyr::filter(experiment != expmts[i] | species != spec_name[j])
-    # print("Subset data to keep successful")
-    # print(unique(dt$species))
-    #
-    # con <- dbConnect(duckdb::duckdb(), dbdir = "data/sim_out.duckdb", read_only = FALSE)
-    # duckdb::dbWriteTable(con, paste0(expmts[i], "_", tolower(sub(" ", "_", spec_name[j]))), dt_sub)
-    # print("Tables in DB:")
-    # print(DBI::dbListTables(con))
-    #
-    # DBI::dbDisconnect(con, shutdown=TRUE)
-  }
-}
-return(dt)
-}
-
-###
-###
-# out_Eggs <- data.table(
-#   year = rep(1:ncol(out[["Eggs"]]), times = 2),
-#   patch_num = rep(1:2, each = ncol(out[["Eggs"]])),
-#   eggs = c(out[["Eggs"]][1, ], out[["Eggs"]][2, ])
-# )
-# setkeyv(out_Eggs, c("year", "patch_num"))
-#
-# out_Recs <- data.table(
-#   year = rep(1:ncol(out[["Recs"]]), times = 2),
-#   patch_num = rep(1:2, each = ncol(out[["Recs"]])),
-#   eggs = c(out[["Recs"]][1, ], out[["Recs"]][2, ])
-# )
-# setkeyv(out_Recs, c("year", "patch_num"))
-###
-###
-
+#' Initializes simulation results arrays with initial population numbers
+#'
+#' @description
+#' This function takes a multi-dimensional list of simulation results arrays,
+#' species names, FLEP ratios, and initial population numbers, and sets the
+#' first time step of each array to the corresponding initial population values.
+#'
+#' @param species_names A character vector of species names.
+#' @param flep_ratios A numeric vector of FLEP ratios.
+#' @param sim_results_arrays A list of lists of 3-dimensional arrays, where
+#'   the first level of the list corresponds to species, the second level to
+#'   FLEP ratios, and the arrays contain population numbers across time, age,
+#'   and patch.
+#' @param fished_N1 A list of lists of initial population numbers, with the
+#'   same structure as `sim_results_arrays`.
+#'
+#' @return
+#' The `sim_results_arrays` list, with the first time step of each array
+#'   initialized to the corresponding values from `fished_N1`.
+#'
+#' @note
+#' This function assumes that the dimensions of `sim_results_arrays` and
+#' `fished_N1` match, and that the elements within them are appropriately
+#' structured for the given species and FLEP ratios.
 #### USED
 init_vals_sim <- function(species_names,
                           flep_ratios,
@@ -1695,30 +684,241 @@ init_vals_sim <- function(species_names,
   }
   return(sim_results_arrays)
 }
-# title: loops over combinations of parameters for a given experiment to run specified simulation
-# description:
-# returns: a `list` data.table where each record contains the combination of parameters used in an
-#          experiment and holds the simulation output variables (numbers, yield,) in a column
-# params:
-# sp_names:
-# bh_alphas:
-# sd_recruitment:
-# flep_ratios:
-# reserve_fracs:
-# noises:
-# sim_nums:
-# patch_nums:
-# leslie_matrices:
-# connectivity_matrices:
-# in_out_fracs:
-# sim_results_arrays:
-# sim_species_derived_vars:
-# fishing_mortality_values:
-# species_flep_fished_ind:
-# sim_species_parms:
-# bev_holt_alphas:
-# bev_holt_beta:
 
+#' Run parameterized age-structured populations simulations and store in a DuckDB database
+#'
+#' @description
+#' Run species specific age-structured popualtions simulations with Beverton-Holt density dependence
+#' under specified dispersal regimes, recruitment variability, fishing intensity,
+#' reserve fractions, and FLEP/fishing mortality ratios. Results are stored as tables in 
+#' a DuckDB database.
+#' 
+#' @param expmts A character vector of simulated dispersal types: 'larval_pool' or 'no_dispersal'
+#' @param spec_name A character vector of species names: "Blue rockfish", "Cabezon", "China rockfish"
+#' @param alpha_bh A numeric value for the Beverton-Holt stock-recruitment relationship slope
+#' @param beta_bh A numeric value indicating the carrying capacity of the Beverton-Holt stock-recruitment relationship 
+#' @param recr_sd A numeric value/vector of recruitment standard deviations to simulate
+#' @param num_sims Number of simulations to run per scenario
+#' @param frac_reserves A numeric vector containing the fraction of coastline in reserves
+#' @param fleps A numeric vector containing the fraction of lifetime egg production (FLEPs)
+#' @param n_years Number of years to simulate
+#' @param noise_vec A character vector that describes the simulate environmental noise 
+#' @param noise_dat A dataframe that contains time series of environmental noise using each simulation run
+#' @param num_patches Number of patches in the spatial model (2 - one with fishing; one w/o fishing)
+#' @param les_mats A list of three dimensional (max. age by max. age by patch) Leslie matrices, one for each species and FLEP.
+#' @param conn_mats A list of matrices detailing the dispersal regime, one for each reserve fraction.
+#' @param in_out_fracs A list of arrays that describes the fraction of coastline in and out of reserves
+#' @param sim_results A list of empthy arrays (1:max_age, 1:num_sims, 1:num_patches) to store population simulation results
+#' @param sim_spec_dervars A list of arrays that contains derived life-history and fishing variables for each species
+#' @param f_vals A numeric vector of fishing mortality values from 0 to 2 in 0.0025 increments
+#' @param spec_flep_f_ind A list of values that maps fishing mortality (F) by species to target FLEPs
+#' @param sim_spec_pars A list of species specific life-history and fishery parameters (natural mortality, weight-at-age, etc.)
+#'
+#' @return
+#' A data table containing summary statistics of the simulation results, with columns for:
+#'   - sim_num: the simulation number
+#'   - reserve_frac: fraction of coast in reserves
+#'   - flep_ratio: the fraction of lifetime egg production (FLEP); 1 = unharvested
+#'   - number: List-column containing arrays of population numbers by year, age, and patch
+#'   - yield: List-column containing arrays of yield by year, age, and patch
+#'
+#' @note
+#' This function assumes that certain objects and functions are available in the global environment,
+#' including:
+#'   - `run_patch_sims2`
+#'   - `data.table` package
+#'   - `duckdb` package
+#'
+#' @examples
+#' \dontrun{
+#' # Assuming all required objects and packages are available
+#' results <- run_sims_sm_write(
+#'   expmts = "no_dispersal",
+#'   spec_name = c("Blue rockfish", "Cabezon", "China rockfish"),
+#'   alpha_bh = bev_holt_alphas,
+#'   beta_bh = bev_holt_beta,
+#'   recr_sd = sd_recruitment,
+#'   fleps = flep_ratios,
+#'   frac_reserves = reserve_fracs,
+#'   noise_vec = noises_white,
+#'   noise_dat = white_noise,
+#'   n_years = n_years_,
+#'   num_sims = sim_nums,
+#'   num_patches = num_patches,
+#'   les_mats = leslie_matrices,
+#'   conn_mats = no_disp_conn_mat,
+#'   in_out_fracs = no_disp_in_out_frac,
+#'   sim_results = sim_results_arrays_init,
+#'   sim_spec_dervars = sim_species_derived,
+#'   f_vals = fishing_mortality_values,
+#'   spec_flep_f_ind = species_flep_fish_ind,
+#'   sim_spec_pars = sim_species_parms
+#' )
+#' }
+#### USED
+run_sims_sm_write <- function(expmts,
+                              spec_name,
+                              alpha_bh,
+                              beta_bh,
+                              recr_sd,
+                              num_sims,
+                              frac_reserves,
+                              fleps,
+                              n_years,
+                              noise_vec,
+                              noise_dat,
+                              num_patches,
+                              les_mats,
+                              conn_mats,
+                              in_out_fracs,
+                              sim_results,
+                              sim_spec_dervars,
+                              f_vals,
+                              spec_flep_f_ind,
+                              sim_spec_pars) {
+  
+  con <-
+    dbConnect(duckdb::duckdb(),
+              dbdir = "data/sim_out.duckdb",
+              read_only = FALSE)
+  
+  for (i in 1:length(expmts)) {
+    for (j in 1:length(spec_name)) {
+      for (k in noise_vec) {
+        for (l in 1:length(recr_sd)) {
+          for (m in 1:num_sims) {
+            for (n in 1:length(frac_reserves)) {
+              for (o in 1:length(fleps)) {
+                dt_one <- data.table(sim_num = m, 
+                                     reserve_frac=as.character(frac_reserves[n]), 
+                                     flep_ratio=as.character(fleps[o]), 
+                                     number = list(), 
+                                     yield = list())
+                
+                out <- run_patch_sims2(
+                  t_steps = n_years,
+                  num_patches = num_patches,
+                  les_mat = les_mats[[j]][[o]],
+                  con_mat = conn_mats[[n]],
+                  frac_in_out = in_out_fracs[[n]],
+                  N = sim_results[[j]][[o]],
+                  # this uses  values from an unfished_N1 for each species
+                  selectivity = as.integer(sim_spec_dervars[[j]][["F_select"]]),
+                  fishing_mortality = c(0, f_vals[spec_flep_f_ind[[j]][[o]]]),
+                  natural_mortality = sim_spec_pars[[j]][["M"]],
+                  weight_at_age = sim_spec_pars[[j]][["biom_const"]] * sim_spec_dervars[[j]][["length_at_age"]] ^
+                    sim_spec_pars[[j]][["biom_exp"]],
+                  alpha = alpha_bh[[j]],
+                  beta = beta_bh,
+                  noise_series = noise_dat[,m]
+                )
+                
+                out_Ns <-
+                  setnames(
+                    as.data.table(out[["Ns"]]),
+                    old = c("V1", "V2", "V3", "value"),
+                    new = c("age", "year", "patch_num", "number")
+                  )
+                setcolorder(out_Ns, c("year", "age", "patch_num"))
+                setkeyv(out_Ns, c("year", "age", "patch_num"))
+                
+                stopifnot(max(out_Ns[j = patch_num]) == num_patches)
+                
+                out_Y <-
+                  setnames(
+                    as.data.table(out[["Y"]]),
+                    old = c("V1", "V2", "V3", "value"),
+                    new = c("age", "year", "patch_num", "yield")
+                  )
+                setcolorder(out_Y, c("year", "age", "patch_num"))
+                setkeyv(out_Y, c("year", "age", "patch_num"))
+                
+                stopifnot(max(out_Y[j = patch_num]) == num_patches)
+                
+                dt_one[, j =  `:=` (number = list(out_Ns),
+                                    yield = list(out_Y))] 
+                
+                rm(out_Ns, out_Y, out) 
+                
+                dt_one <- dt_one %>%
+                  unnest(c(number, yield), names_repair = "minimal") 
+                
+                dt_one <- dt_one[, c(1,2,3,4,5,6,7,11)]
+                
+                if (n == 1 & o == 1) {
+                  dt_ddb <- dt_one
+                  rm(dt_one)
+                } else {
+                  dt_ddb <- rbind(dt_ddb, dt_one)
+                  rm(dt_one)
+                }
+              }
+            }
+            
+            tab_name <- paste0(expmts[i], "_", tolower(sub(
+              " ", "_", spec_name[j]
+            )), "_", k, "_", substring(as.character(recr_sd[l]), 3))
+            
+            duckdb::dbWriteTable(con,
+                                 tab_name,
+                                 dt_ddb,
+                                 append = TRUE) # FALSE
+            rm(dt_ddb)
+            
+          }
+        }
+      }
+      print(paste0("dispersal: ", expmts[i], " and species: ", spec_name[j],
+                   " and ", k, " noise ", " and recruit sd of ", recr_sd[l]))
+    }
+  }
+  DBI::dbDisconnect(con, shutdown = TRUE)
+  return(dt)
+}
+
+
+#' Runs a multi-patch population simulation over parameter combinations for specified
+#' simulation experiments
+#'
+#' @description
+#' This function simulates the dynamics of a fish population across multiple (2)
+#' patches, incorporating age-specific transitions, dispersal, fishing mortality,
+#' natural mortality, density-dependent recruitment, and environmental noise.
+#'
+#' @param t_steps Number of time steps to simulate.
+#' @param num_patches Number of patches in the model.
+#' @param les_mat A 3-dimensional array of life-stage transition matrices,
+#'   with dimensions (age, age, num_patches).
+#' @param con_mat A matrix representing connectivity between patches for larval dispersal.
+#' @param frac_in_out A vector of fractions of individuals remaining in each patch
+#'   after dispersal.
+#' @param N A 3-dimensional array of initial population numbers, with dimensions
+#'   (age, t_steps, patch).
+#' @param selectivity A vector of fishing selectivity values for each age class.
+#' @param fishing_mortality A vector of fishing mortality rates for each age class 
+#'   in fished patches.
+#' @param natural_mortality A vector of natural mortality rates for each age class.
+#' @param weight_at_age A vector of weight-at-age values.
+#' @param alpha A parameter for the Beverton-Holt recruitment function.
+#' @param beta A parameter for the Beverton-Holt recruitment function, modified
+#'   by frac_in_out.
+#' @param noise_series A vector of environmental noise values for each time step.
+#'
+#' @return
+#' A list with two elements:
+#'   - Ns: A 3-dimensional array of population numbers across time, age, and patch.
+#'   - Y: A 3-dimensional array of yield across time, age, and patch.
+#'
+#' @details
+#' The model assumes a fixed fishing mortality rate for each patch and a
+#' Beverton-Holt recruitment function with density dependence.
+#'
+#' @examples
+#' \dontrun{
+#' # Assuming necessary data structures and parameters are set
+#' simulation_results <- run_patch_sims2(t_steps = 100, num_patches = 5, ...)
+#' }
+#### USED 
 run_patch_sims2 <- function(t_steps,
                             num_patches,
                             les_mat,
@@ -1778,931 +978,440 @@ run_patch_sims2 <- function(t_steps,
   return(out)
 }
 
-f2flep_calcs <- function(specs,
-                         inds_fished_flep,
-                         fs) {
-  spec_f2flep <- purrr::map_dbl(inds_fished_flep, ~ fs[[.x]])
-  
-  spec_f2flep <- data.table::data.table(
-    species = specs,
-    fleps = as.numeric(names(spec_f2flep)),
-    f_vals = as.numeric(spec_f2flep)
-  )
-  
-  return(spec_f2flep)
-}
-# f2flep_calcs <- function(specs,
-#                          inds_fished_flep,
-#                          fs) {
-#   spec_f2flep <- vector("list", length(specs))
-#
-#   for (i in specs) {
-#     spec_f2flep[[i]] <- purrr::map_dbl(inds_fished_flep[[i]], ~ fs[[.x]])
-#   }
-#
-#   spec_f2flep <- specs %>%
-#     purrr::map(., ~ data.table(
-#       species = .x,
-#       fleps = names(spec_f2flep[[.x]]),
-#       f_vals = spec_f2flep[[.x]]
-#     )) %>%
-#     rbindlist(.)
-#
-#   spec_f2flep$fleps <- as.numeric(spec_f2flep$fleps)
-#
-#   return(spec_f2flep)
-# }
+# Functions for table meta data
 
-merge_yield_flep2fvals <- function(mean_yield_by_flep,
-                                   f2flep) {
-  yield_flep2fvals <- merge(
-    mean_yield_by_flep,
-    f2flep,
-    by.x = c("species", "flep_ratio"),
-    by.y = c("species", "fleps")
-  )
+
+#' Extracts simualtion experiment parameters from a structured DuckDB table name
+#'
+#' @description
+#' This function extracts the species, dispersal type, and noise type from a
+#' DuckDB table name follow a specific naming convention.
+#'
+#' @param table_name A character string representing the name of a DuckDB table.
+#'
+#' @return
+#' A list containing three character strings:
+#'   - current_dispersal: The dispersal type (e.g., "larval_pool", "no_dispersal")
+#'   - current_species: The species name
+#'   - current_noise: The noise type
+#'
+#' @note
+#' This function assumes that table names follow a specific format, including
+#' the dispersal type, species name, and noise type in a consistent order.
+#'
+#' @examples
+#' \dontrun{
+#' exp_params <- get_current_exp("my_db_larval_pool_blue_rockfish_mei_135_75")
+#' print(exp_params)  # Output: list("larval_pool", "blue_rockfish", "mei_135_75")
+#' }
+
+get_current_exp <- function(table_name) {
+  # returns species, dispersal, noise params to extract from duckdb table names 
+  valid_dispersal <- c("larval_pool", "no_dispersal")
+  valid_species <-
+    c("blue_rockfish", "cabezon", "china_rockfish")
+  valid_noise <- c("mei_135_75", "white_135_75")
   
-  
-  return(yield_flep2fvals[, scaled_yield :=  V1 / max(V1), by = .(experiment, noise, species)])
+  current_dispersal <-
+    valid_dispersal[stringr::str_detect(table_name, valid_dispersal)]
+  current_species <-
+    valid_species[stringr::str_detect(table_name, valid_species)]
+  current_noise <-
+    valid_noise[stringr::str_detect(table_name, valid_noise)]
+  return(list(current_dispersal, current_species, current_noise))
 }
 
-
-no_reserve_yield_msy_plot <- function(msy_f_flep,
-                                      spec,
-                                      expmt) {
-  ggplot(msy_f_flep,
-         aes(x = f_vals,
-             y = V1,
-             color = noise)) +
-    ylab("Yield") +
-    xlab("F") +
-    ggtitle(paste0("MSY for no coast in reserve: ", spec, " and ", expmt)) +
-    geom_line() +
-    geom_vline(data = msy_f_flep[msy_f_flep[, .I[V1 == max(V1)], by = .(experiment, noise, species)][, V1]],
-               aes(xintercept = f_vals),
-               colour = "red3") +
-    xlim(0, 0.8) +
-    theme_bw()
-}
-
-# Plot yield and cv recruitment contours vs F and Frac in reserve
-cv_recs_yield_contour_plots <- function(rec_data,
-                                        cv_rec_brks = c(seq(0.5, 2, by = 0.1), Inf),
-                                        yield_data,
-                                        yield_contours = c(0.8, 0.95),
-                                        # f2flep,
-                                        spec,
-                                        expt) {
-  ggplot(data = rec_data,
-         aes(x = reserve_frac,
-             y = f_vals,
-             z = V1)) +
-    xlab("Fraction in reserve") +
-    ylab("F") +
-    geom_contour_filled(breaks = cv_rec_brks) +
-    geom_contour(
-      data = yield_data,
-      aes(x = reserve_frac,
-          y = f_vals,
-          z = scaled_yield),
-      breaks = yield_contours,
-      color = "lightgrey"
-    ) +
-    metR::geom_text_contour(
-      data = yield_data,
-      aes(x = reserve_frac,
-          y = f_vals,
-          z = scaled_yield),
-      breaks = yield_contours,
-      color = "lightgrey",
-      skip = 0,
-      label.placer = isoband::label_placer_middle(),
-      size = 3
-    ) +
-    facet_grid(. ~ noise) +
-    # geom_hline(
-    #   data = f2flep,
-    #   aes(yintercept = f_vals),
-    #   colour = "lightgrey",
-    #   linetype = 2
-    # ) +
-    theme(legend.position = "right") +
-    scale_x_continuous(expand = expansion(mult = c(0, 0))) +
-    scale_y_continuous(expand = expansion(mult = c(0, 0), add = c(0,-1))) +
-    ggtitle(
-      paste0(
-        "CV recruitment (color) and yield (grey line) contour\nfor ",
-        spec,
-        " with ",
-        expt
-      )
-    ) +
-    labs(fill = 'CV recruitment') +
-    theme(text = element_text(size = 12))
-}
-
-dat_yield_v_frac_res_by_flep <-
-  function(base_cols = c(
-    "experiment",
-    "species" ,
-    "bh_alpha",
-    "rec_sd",
-    "reserve_frac",
-    "flep_ratio",
-    "noise",
-    "sim_num"
-  ),
-  out,
-  species_names,
-  exp_names) {
-    base_cols_recs <- c(base_cols, "number")
-    base_cols_yield <- c(base_cols, "yield")
-    
-    # expand list.frame to get yield sim results
-    out_yield <- out[experiment %in% exp_names &
-                       species %in% species_names,
-                     j = ..base_cols_yield] %>% unnest(cols = c(yield)) %>%
-      as.data.table(.)
-    
-    # expand list.frame to get recruitment sim results
-    out_recs <- out[experiment %in% exp_names &
-                      species %in% species_names,
-                    j = ..base_cols_recs] %>% unnest(cols = c(number)) %>%
-      as.data.table(.)
-    
-    out_recs <-
-      out_recs[, j = .(recruits = sum(number)), by = .(
-        experiment,
-        species,
-        bh_alpha,
-        rec_sd,
-        reserve_frac,
-        flep_ratio,
-        noise,
-        sim_num,
-        year
-      )]
-    # aggregate recruits across patches
-    
-    
-    # get total yield (aggregate across ages and patches)
-    out_yield <-
-      out_yield[, j = .(yield = sum(yield)), by = .(
-        experiment,
-        species,
-        bh_alpha,
-        rec_sd,
-        reserve_frac,
-        flep_ratio,
-        noise,
-        sim_num,
-        year
-      )]
-    
-    # merge out_recs and out_yield
-    dt <- merge(
-      out_yield,
-      out_recs,
-      by = c(
-        "experiment",
-        "species",
-        "bh_alpha",
-        "rec_sd",
-        "reserve_frac",
-        "flep_ratio",
-        "noise",
-        "sim_num",
-        "year"
-      )
-    )
-    return(dt)
-  }
-
-yield_vs_resfrac_by_flep <- function(dt,
-                                     species_names,
-                                     exp_names,
-                                     noises,
-                                     flep_keeps = (3:8) / 10) {
-  dt_yp <-
-    dt[year > 500 &
-         flep_ratio %in% flep_keeps, .(yield = mean(yield) / 1000),
-       by = c(
-         "experiment",
-         "species",
-         "bh_alpha",
-         "rec_sd",
-         "reserve_frac",
-         "flep_ratio",
-         "noise",
-         "sim_num"
-       )]
+#' Formats experiment parameters for plotting
+#'
+#' @description
+#' This function takes a DuckDB table name and returns a formatted string
+#' containing "pretty" versions of the species, dispersal type, and noise type,
+#' suitable for use in plot titles or labels.
+#'
+#' @param table_name A character string representing the name of a DuckDB table.
+#'
+#' @return
+#' A list combining the formatted dispersal type, species name,
+#' and noise type.
+#'
+#' @note
+#' This function assumes that table names follow a specific format, including
+#' the dispersal type, species name, and noise type in a consistent order.
+#'
+#' @examples
+#' \dontrun{
+#' nice_exp_name <- get_nice_exp("my_db_larval_pool_blue_rockfish_mei_135_75")
+#' print(nice_exp_name)  # Output: list("Larval pool", "Blue rockfish", "ENSO")
+#' }
+#' 
+get_nice_exp <- function(table_name) {
+  # returns "pretty" version of species, dispersal, noise params for plotting
+  valid_dispersal <- c("larval_pool", "no_dispersal")
+  valid_species <-
+    c("blue_rockfish", "cabezon", "china_rockfish", "pacific_cod", "kelp_bass")
+  valid_noise <- c("mei_135_75", "white_135_75")
   
-  p <-
-    ggplot(dt_yp, aes(
-      x = reserve_frac,
-      y = yield,
-      color = factor(flep_ratio)
-    )) +
-    geom_line() +
-    theme_bw() +
-    scale_color_discrete_sequential(palette = "Viridis") +
-    facet_grid(species ~ ., scales = "free_y") +
-    expand_limits(x = 0, y = 0) +
-    ggtitle(paste0(exp_names, " and ", noises))
+  pretty_dispersal <- c("Larval pool", "No dispersal")
+  pretty_species <- c("Blue rockfish", "Cabezon", "China rockfish", "Pacific cod", "Kelp bass")
+  pretty_noise <- c("ENSO", "White")
   
-  return(p)
-}
-
-plot_cv_metric_vs_resfrac_by_flep <- function(dt,
-                                              # metric,
-                                              burn_in_end,
-                                              species_names,
-                                              exp_names,
-                                              noises,
-                                              flep_keeps = (3:8) / 10) {
-  dt_cvp <- dt[year > burn_in_end & flep_ratio %in% flep_keeps,
-               .(cv = sd(recruits) / mean(recruits)),
-               by = c(
-                 "experiment",
-                 "species",
-                 "bh_alpha",
-                 "rec_sd",
-                 "reserve_frac",
-                 "flep_ratio",
-                 "noise",
-                 "sim_num"
-               )]
+  nice_dispersal <-
+    pretty_dispersal[stringr::str_detect(table_name, valid_dispersal)]
+  nice_species <-
+    pretty_species[stringr::str_detect(table_name, valid_species)]
+  nice_noise <-
+    pretty_noise[stringr::str_detect(table_name, valid_noise)]
   
-  p <-
-    ggplot(dt_cvp, aes(
-      x = reserve_frac,
-      y = cv,
-      color = factor(flep_ratio)
-    )) +
-    geom_line()  +
-    theme_bw() +
-    facet_grid(species ~ .) +
-    scale_color_discrete_sequential(palette = "Viridis") +
-    facet_grid(species ~ ., scales = "free_y") +
-    expand_limits(x = 0, y = 0) +
-    ggtitle(paste0(exp_names, " and ", noises))
-  
-  return(p)
-}
-
-# plot two spectra on same graph
-
-plot_3_spectra <- function(burn,
-                           len_sim,
-                           series1,
-                           ser1name,
-                           series2,
-                           ser2name,
-                           series3,
-                           ser3name,
-                           rand_seed) {
-  first_sim_ind <- burn + 1
-  total_sim_len <- burn + len_sim
-  x <- ceiling(sqrt(length((first_sim_ind + 1):(total_sim_len))))
-  span_odd_num <- ifelse(x %% 2 == 0, x + 1, x)
-  
-  np1 <- spectrum(series1[first_sim_ind:total_sim_len],
-                  spans = c(span_odd_num, span_odd_num),
-                  plot = FALSE)
-  np2 <- spectrum(series2[first_sim_ind:total_sim_len],
-                  spans = c(span_odd_num, span_odd_num),
-                  plot = FALSE)
-  np3 <- spectrum(series3,
-                  spans = c(9, 9),
-                  plot = FALSE)
-  
-  df1 <- data.frame(freq = np1[["freq"]],
-                    spec = np1[["spec"]],
-                    name_col = ser1name)
-  df2 <- data.frame(freq = np2[["freq"]],
-                    spec = np2[["spec"]],
-                    name_col = ser2name)
-  df3 <- data.frame(freq = np3[["freq"]],
-                    spec = np3[["spec"]],
-                    name_col = ser3name)
-  
-  df_specs <- rbind(df1, df2, df3)
-  
-  max_y <- 1.1 * max(df_specs$spec)
-  
-  p <- ggplot(data = df_specs,
-              aes(x = freq,
-                  y = spec,
-                  colour = name_col)) +
-    geom_line() +
-    theme_bw() +
-    ggtitle(paste0("Noise spectra -- rand seed: ", r_seed)) +
-    ylim(0, max_y)
-  return(p)
+  return(list(nice_dispersal, nice_species, nice_noise))
 }
 
 
-## FUNCS ADDED NOV 20 2022
-get_fs_from_fleps <- function(species,
-                              flep_inds,
-                              f_vals) {
-  fleps_2_fs <-
-    data.frame(flep_vals = as.numeric(names(flep_inds[[species]])),
-               f_vals = f_vals[as.numeric(flep_inds[[species]])])  %>%
-    mutate(flep_vals_ch = as.character(flep_vals))
-  
-  return(fleps_2_fs)
-}
 
-
-## Extract data from list.frames and transform for plots/analyses
-## get_outvar_from_species_sim_output () returns takes speci_disp (`lf`) and returns spec_disp_metric (i.e., brf_lp_yield)
-get_outvar_from_species_sim_output <- function(lf,
-                                               target_col,
-                                               keep_cols,
-                                               drop_cols,
-                                               burn_in_len) {
-  lf_metric <- lf %>%
-    select(all_of(keep_cols)) %>%
-    unnest(cols = c(!!sym(target_col))) %>%
-    dplyr::filter(year > burn_in_len) %>%
-    select(-all_of(drop_cols)) %>%
-    as.data.table(.)
-  
-  return(lf_metric)
-}
-
-get_noise_from_spec_disp_var <- function(sdv,
-                                         metric,
-                                         noise_type) {
-  if (metric == "number") {
-    keeper_vars <-
-      c(
-        "experiment",
-        "noise",
-        "reserve_frac",
-        "flep_ratio",
-        "age",
-        "year",
-        "patch_num",
-        "number"
-      )
-  }
-  
-  if (metric == "yield") {
-    keeper_vars <-
-      c(
-        "experiment",
-        "noise",
-        "reserve_frac",
-        "flep_ratio",
-        "age",
-        "year",
-        "patch_num",
-        "yield"
-      )
-  }
-  
-  return(sdv[i = noise == noise_type, ..keeper_vars])
-}
-
-## Find FLEP that gets the max yield for no reserves
-
-flep_2_max_yield_no_reserves <- function(sp_dis_yield,
-                                         fs_from_fleps) {
-  sp_dis_yield_reg_sd <-
-    sp_dis_yield[i = noise == "white"][reserve_frac == 0, .(reserve_frac, flep_ratio, age, year, patch_num, yield)]
-  
-  sp_dis_yield_reg_sd[, flep_yields := sum(yield) , by = flep_ratio]
-  
-  sp_dis_yield_reg_sd <- sp_dis_yield_reg_sd %>%
-    dplyr::left_join(x = .,
-              y = fs_from_fleps,
-              by = c("flep_ratio" = "flep_vals")) %>%
-    dplyr::filter(!is.na(f_vals))
-  
-  F_max_yield_reg_sd <- sp_dis_yield_reg_sd %>%
-    dplyr::group_by(f_vals, flep_ratio) %>%
-    dplyr::summarise(yields = sum(yield) / 1e6) %>%
-    dplyr::ungroup(.) %>%
-    dplyr::filter(yields == max(yields)) %>%
-    .$f_vals
-  return(F_max_yield_reg_sd)
-}
-
-## Plot prep
-
-frac_years_below_max_yield <- function(sdmn,
-                                       fs_from_fleps,
-                                       f_maxes_yield,
-                                       sim_len) {
-  sdmn_ann_yield <- sdmn %>%
-    dplyr::mutate(flep_ratio = as.character(flep_ratio)) %>%
-    dplyr::left_join(
-      x = .,
-      y = fs_from_fleps[, c("flep_vals_ch", "f_vals")],
-      by = c("flep_ratio" = "flep_vals_ch")
-    )  %>%
-    dplyr::group_by(reserve_frac, flep_ratio, f_vals, year) %>%
-    dplyr::summarize(annual_yield = sum(yield)) %>%
-    dplyr::ungroup() %>%
-    dplyr::mutate(f_fmsy = f_vals / f_maxes_yield)
-  
-  # Find median yield where F that maxes yield
-  
-  median_ann_yield_f_max_yield <- sdmn_ann_yield %>%
-    dplyr::filter(f_vals == f_maxes_yield) %>%
-    dplyr::summarize(median_ann_yield_f_max_yield = median(annual_yield)) %>%
-    .$median_ann_yield_f_max_yield
-  
-  
-  sdmn_frac_below_med_max_yield <-  sdmn_ann_yield %>%
-    dplyr::mutate(below_sdmn_ann_yield = if_else(annual_yield < median_ann_yield_f_max_yield, 1, 0)) %>%
-    dplyr::group_by(reserve_frac, f_fmsy) %>%
-    dplyr::summarise(n_yrs_below = sum(below_sdmn_ann_yield)) %>%
-    dplyr::filter(n_yrs_below <= sim_len) %>%
-    dplyr::ungroup() %>%
-    dplyr::mutate(frac_below_med_yield_f_max = round(n_yrs_below / sim_len, 3))
-  
-  return(sdmn_frac_below_med_max_yield)
-}
-
-##  Yield plots
-## Existing functions
-plot_frac_years_below_max_yield <-
-  function(sdmn_frac_below_med_max_yield,
-           species,
-           dispersal) {
-    sdmn_frac_below_med_max_yield_plt <-
-      sdmn_frac_below_med_max_yield %>%
-      dplyr::filter(., reserve_frac <= 0.55, f_fmsy <= 2.5) %>%
-      ggplot(data = .,
-             aes(x = reserve_frac, y = f_fmsy, z = frac_below_med_yield_f_max)) +
-      geom_contour_filled(bins = 12) +
-      ggtitle(paste0(species, " ", dispersal, ": time below median max yield")) +
-      xlab("Reserve fraction") +
-      ylab("F/Fmsy") +
-      scale_fill_viridis_d(option = "D", direction = -1) +
-      geom_segment(aes(
-        x = 0,
-        xend = 0.55,
-        y = 1,
-        yend = 1
-      ), color = "red")
-    return(sdmn_frac_below_med_max_yield_plt)
-  }
-
-## Bolker diff
-
-bdiff <- function(x) {
-  return(c(NA, diff(x)))
-}
-## CONTOUR + GRADIENT VECTOR
-## YIELD
-sdmn_calc_gradient_vector_yield <- function(sdmn_frac_yield) {
-  
-  stopifnot(ncol(sdmn_frac_yield) == 4)
-  lapply(sdmn_frac_yield, function(x) stopifnot(is.numeric(x)))
-  print(sdmn_frac_yield$frac_below_med_yield_f_max)
-  stopifnot((sdmn_frac_yield$frac_below_med_yield_f_max <= 1) & (sdmn_frac_yield$frac_below_med_yield_f_max >= 0))
-  
-  sdmn_frac_yield_w <- sdmn_frac_yield %>%
-    tidyr::pivot_wider(id_cols = reserve_frac,
-                names_from = f_fmsy,
-                names_prefix = "f_flep_",
-                values_from = frac_below_med_yield_f_max)
-  
-  sdmn_frac_yield_mat <- as.matrix(sdmn_frac_yield_w[,2:ncol(sdmn_frac_yield_w)])
-  
-  rr <- row(sdmn_frac_yield_mat)
-  cc <- col(sdmn_frac_yield_mat)
-  dx <- t(apply(sdmn_frac_yield_mat, 1, bdiff))
-  dy <- apply(sdmn_frac_yield_mat, 2, bdiff)
-  
-  f_vals <- unique(sdmn_frac_yield$f_fmsy)
-  res_vals <- unique(sdmn_frac_yield$reserve_frac)
-  
-  dx_tib <- tibble(data.frame(dx))
-  dx_tib$reserve_frac <- as.character(res_vals)
-  
-  names(dx_tib)[1] <- "f_flep_0.0000000"
-  dx_tib <- pivot_longer(dx_tib, cols = c(starts_with("f_flep_")), 
-                         names_to = "f_fmsy",  values_to = "dx") %>%
-    dplyr::mutate(f_fmsy = substr(as.character(substring(f_fmsy, first = 8)), 1, 10))
-  
-  
-  dy_tib <- tibble(data.frame(dy))
-  dy_tib$reserve_frac <- as.character(res_vals)
-  dy_tib <- dy_tib %>%
-    tidyr::pivot_longer(., cols = c(starts_with("f_flep_")), 
-                 names_to = "f_fmsy",  values_to = "dy") %>%
-    dplyr::mutate(f_fmsy = substr(as.character(substring(f_fmsy, first = 8)), 1, 10))
-  
-  
-  plt_dat <- sdmn_frac_yield %>%
-    dplyr::mutate(reserve_frac = as.character(reserve_frac), 
-           f_fmsy = as.character(f_fmsy),
-           f_fmsy = substr(f_fmsy, 1, 10)) %>%
-    dplyr::left_join(., dx_tib, by = c("reserve_frac", "f_fmsy")) %>%
-    dplyr::left_join(., dy_tib, by = c("reserve_frac", "f_fmsy")) %>%
-    dplyr::mutate(reserve_frac = as.numeric(reserve_frac),
-           f_fmsy = as.numeric(f_fmsy)) 
-  
-  return(plt_dat)
-}
-
-
-plt_sdmn_yield_gradvec_cont <- function(plt_dat, species, dispersal, noise,
-                                        max_res_frac = 0.5, 
-                                        max_f_fmsy = 2) {
-  plt_dat_preped <- plt_dat %>%
-    dplyr::filter(reserve_frac <= max_res_frac, f_fmsy <= max_f_fmsy) %>%
-    dplyr::mutate(f_fmsy = if_else(f_fmsy == 0, "0.0000000", 
-                            as.character(f_fmsy)),
-           reserve_frac = as.character(reserve_frac)) %>%
-    dplyr::mutate(reserve_frac = as.numeric(reserve_frac),
-           f_fmsy = as.numeric(f_fmsy)) %>%
-    dplyr::mutate(end_x = reserve_frac + (dx * 0.5), 
-           end_y = f_fmsy + (dy * 0.5)) 
-  
-  base_plt_gradvec_cont <- plt_dat_preped %>%
-    ggplot(data = .,
-           aes(x = reserve_frac, y = f_fmsy, z = frac_below_med_yield_f_max)) +
-    geom_contour_filled(bins = 12) +
-    ggtitle(paste0(species, " ", dispersal," ", noise, " - time below median max yield")) +
-    xlab("Reserve fraction") +
-    ylab("F/Fmsy") +
-    # guides(fill="none") + 
-    scale_fill_viridis_d(option = "D", direction = -1) +
-    geom_segment(aes(x = reserve_frac,
-                     y = f_fmsy,
-                     xend = end_x, 
-                     yend = end_y),
-                 arrow = arrow(length = unit(0.1,"cm"))) +
-    scale_x_continuous(expand = expansion(add = 0), limits = c(0, 0.5)) +
-    scale_y_continuous(expand = expansion(add = 0), limits = c(0, 2)) +
-    theme_bw()
-  
-  return(base_plt_gradvec_cont)
-}
-
-plt_sdmn_yield_gradvec_cont2 <- function(dat,
-                                         species, 
-                                         dispersal, 
-                                         noise,
-                                         scale = 0.5) {
-  
-  x_labs <- sort(unique(dat$reserve_frac))
-  y_labs <- sort(unique(dat$f_fmsy))
-  
-  dat2 <- dat[, c("reserve_frac", "f_fmsy", "frac_below_med_yield_f_max")]
-  names(dat2) <- c("x", "y", "value")
-  
-  dat_mat <- as.matrix(tidyr::pivot_wider(dat2, names_from = y, values_from = value))
-  
-  plt_dat <- as.cimg(dat_mat[,-1])
-  plt_dat_gr <- imgradient(plt_dat, "xy")
-  names(plt_dat_gr) <- c("dx", "dy")
-  
-  plt_dat_gr_df <- as.data.frame(plt_dat_gr)
-  plt_dat_gr_df_w <- tidyr::spread(data = plt_dat_gr_df, im, value)
-  plt_dat_gr_df_w_plt <- plt_dat_gr_df_w %>%
-    mutate(., xend = x-(dx/sd(dx) * scale),
-           yend = y-(dy/sd(dy) * scale))
-  
-  plt_dat_gr_df_w_plt <- bind_cols(dat[, c("reserve_frac", "f_fmsy", "frac_below_med_yield_f_max")],
-                                   plt_dat_gr_df_w_plt)
-
-  p <- ggplot(plt_dat_gr_df_w_plt %>% dplyr::filter(., x %% 2 == 0, y %% 2 == 0), aes(x = x, y = y)) +
-    geom_raster(data = as.data.frame(plt_dat), aes(x=x, y=y, fill=value),
-                alpha = 0.85,) +
-    scale_fill_viridis_c(option = "D", direction = -1) +
-    geom_segment(aes(xend = xend, yend = yend),
-                 arrow = arrow(length = unit(0.01, "npc")),
-                 col="black") +
-    scale_x_continuous(expand = c(0,-0.5), limits = c(0, 12),
-                       breaks = sort(unique(plt_dat_gr_df_w_plt$x)),
-                       labels = x_labs) +
-    scale_y_continuous(expand = c(0,-0.5), limits = c(0, 30),
-                       breaks = sort(unique(plt_dat_gr_df_w_plt$y)),
-                       labels = round(y_labs, 2)) + 
-    geom_hline(yintercept = 1, colour = "red") +
-                       # breaks = sort(unique(plt_dat_gr_df_w_plt$y)), labels = round(y_labs, 2)) +
-    ggtitle(paste0(species, " ", dispersal," ", noise, " - time below median max yield (fraction of years)")) +
-    xlab("Reserve fraction") +
-    ylab("F/Fmsy") +
-    theme_bw()
-
-  return(print(p))
-}
-
-## Yield diffs: lp - nd
-plt_sdmn_yield_lp_diff_nd_gradvec_cont2 <- function(dat,
-                                         species, 
-                                         dispersal, 
-                                         noise,
-                                         scale = 0.5) {
-  
-  x_labs <- sort(unique(dat$reserve_frac))
-  y_labs <- sort(unique(dat$f_fmsy))
-  
-  dat2 <- dat[, c("reserve_frac", "f_fmsy", "frac_below_med_yield_diffs")]
-  names(dat2) <- c("x", "y", "value")
-  
-  dat_mat <- as.matrix(tidyr::pivot_wider(dat2, names_from = y, values_from = value))
-  
-  plt_dat <- as.cimg(dat_mat[,-1])
-  plt_dat_gr <- imgradient(plt_dat, "xy")
-  names(plt_dat_gr) <- c("dx", "dy")
-  
-  plt_dat_gr_df <- as.data.frame(plt_dat_gr)
-  plt_dat_gr_df_w <- tidyr::spread(data = plt_dat_gr_df, im, value)
-  plt_dat_gr_df_w_plt <- plt_dat_gr_df_w %>%
-    mutate(., xend = x-(dx/sd(dx) * scale),
-           yend = y-(dy/sd(dy) * scale))
-  
-  plt_dat_gr_df_w_plt <- bind_cols(dat[, c("reserve_frac", "f_fmsy", "frac_below_med_yield_diffs")],
-                                   plt_dat_gr_df_w_plt)
-  
-  p <- ggplot(plt_dat_gr_df_w_plt %>% dplyr::filter(., x %% 2 == 0, y %% 2 == 0), aes(x = x, y = y)) + # %>% dplyr::filter(., x %% 2 == 0, y %% 2 == 0)
-    geom_raster(data = as.data.frame(plt_dat), aes(x=x, y=y, fill=value),
-                alpha = 0.85,) +
-    scale_fill_gradient2(low = "#440154", mid = "#21918c", high = "#fde725", midpoint = 0,
-                         guide = guide_colourbar(title = "")) +
-    geom_segment(aes(xend = xend, yend = yend),
-                 arrow = arrow(length = unit(0.01, "npc")),
-                 col="black") +
-    scale_x_continuous(expand = c(0,-0.5), limits = c(0, 12),
-                       breaks = sort(unique(plt_dat_gr_df_w_plt$x)),
-                       labels = x_labs) +
-    scale_y_continuous(expand = c(0,-0.5), limits = c(0, 30),
-                       breaks = sort(unique(plt_dat_gr_df_w_plt$y)),
-                       labels = round(y_labs, 2)) + 
-    geom_hline(yintercept = 1, colour = "red") +
-    # breaks = sort(unique(plt_dat_gr_df_w_plt$y)), labels = round(y_labs, 2)) +
-    ggtitle(paste0(species, " difference in time below median max yield (fraction of years) \n", noise, " noise between larval pool and no dispersal")) +
-    xlab("Reserve fraction") +
-    ylab("F/Fmsy") +
-    theme_bw()
-  
-  return(print(p))
-}
-
-## RECRUITS
-
-
-calc_med_recruits <- function(sdn_recs, 
+#' Get Fishing Mortality Levels that Maximize Yield
+#'
+#' For each FLEP ratio, find the fishing mortality level  
+#' that maximizes yield when there are no reserves.
+#'
+#' @param input_df dataframe with simulation results 
+#' @param fleps_2_fs dataframe matching FLEP ratios to F values
+#' 
+#' @return Vector of optimal F values for maximum yield for each FLEP ratio
+#'
+#' @examples
+#' input_df <- data.frame(sim_num = rep(1, 30), 
+#'                        reserve_frac = 0.25, flep_ratio = 0.5, 
+#'                        year = rep(1:6, each = 5), 
+#'                        age = rep(1:5, times = 6), 
+#'                        abundance = rnorm(30, 1000, 10), yield = rnorm(30, 300, 10)) 
+#' fleps_2_fs <- data.frame(flep_vals = 0.5, f_vals = 0.225, flep_vals_ch = "0.5")
+#'   
+#' max_yield_fs <- get_f_maxes_yield(input_df, fleps_2_fs)
+get_f_maxes_yield <- function(input_df,
                               fleps_2_fs) {
-  sdn_recs_median <- sdn_recs %>%
-    dplyr::mutate(flep_ratio = as.character(flep_ratio)) %>%
-    dplyr::left_join(
-      x = .,
-      y = fleps_2_fs[, c("flep_vals_ch", "f_vals")],
-      by = c("flep_ratio" = "flep_vals_ch")
-    )  %>%
-    dplyr::group_by(year, reserve_frac, f_vals) %>%
-    dplyr::summarize(ann_recruits = sum(number, na.rm = TRUE)) %>%
+  # Find the fishing mortality level that maximizes yield
+  # with no reserves
+  
+  stopifnot(colnames(input_df) == c("sim_num", "reserve_frac", "flep_ratio",
+                                    "year", "age", "abundance", "yield"))
+  
+  F_maxes_yield <- input_df %>%
+    dplyr::filter(reserve_frac == "0") %>%
+    dplyr::left_join(., y = fleps_2_fs, by = join_by(flep_ratio == flep_vals_ch)) %>%
+    dplyr::group_by(f_vals, flep_ratio, year) %>%
+    dplyr::summarise(yield = sum(yield),
+                     abundance = sum(abundance)) %>%
     dplyr::ungroup() %>%
-    dplyr::arrange(reserve_frac, f_vals, year) %>%
-    dplyr::mutate(reserve_frac = as.character(reserve_frac),
-           f_vals = as.character(f_vals)) %>%
-    dplyr::filter(reserve_frac == 0 & f_vals == 0) %>%
-    dplyr::group_by(reserve_frac, f_vals) %>%
-    dplyr::summarize(average_recruits = mean(ann_recruits),
-              max_recruits = max(ann_recruits),
-              q90_recruits = quantile(ann_recruits, 0.9),
-              q75_recruits = quantile(ann_recruits, 0.75),
-              q60_recruits = quantile(ann_recruits, 0.6),
-              q50_recruits = quantile(ann_recruits, 0.5)) %>%
-    dplyr::ungroup() %>%
-    .$q50_recruits
-  return(sdn_recs_median)
+    dplyr::group_by(f_vals, flep_ratio) %>%
+    dplyr::summarize(yield = mean(yield, na.rm = TRUE),
+                     abundance = mean(abundance, na.rm = TRUE)) %>%
+    ungroup() %>%
+    dplyr::filter(yield == max(yield)) %>%
+    .$f_vals
+  
+  return(F_maxes_yield)
 }
 
-# = brf_lp_recs_white
-frac_years_below_med_recs <- function(sdn_recs, 
-                                      fleps_2_fs,
-                                      F_max_yield_reg_sd,
-                                      rec_threshold,
-                                      sim_len) {
+#' Adds fishing mortality and biomass columns to a simulation output data frame
+#'
+#' @description
+#' This function takes a simulation output data frame and adds columns for
+#' fishing mortality (F) values corresponding to FLEP (Fraction of Lifetime
+#' Egg Production) values, as well as biomass at age.
+#'
+#' @param input_df A data frame containing simulation output, with columns for
+#'   sim_num, reserve_frac, flep_ratio, year, age, abundance, and yield.
+#' @param spec_fleps_2_fs A data frame mapping FLEP values to F values for the
+#'   species in question.
+#' @param F_maxes_yield A numeric vector of F_max values for each species,
+#'   used to calculate F/F_MSY.
+#' @param waa_g_df A data frame containing weight-at-age values (in grams).
+#'
+#' @return
+#' A data frame with the same columns as the input data frame, plus additional
+#' columns for f_vals (fishing mortality values), f_fmsy (F/F_MSY), and
+#' biomass_at_age (in tonnes).
+#'
+#' @note
+#' This function assumes that the input data frame has specific column names
+#' and that the provided data frames for FLEP-to-F mapping and weight-at-age
+#' have compatible structures.
+#'
+#' @examples
+#' \dontrun{
+#' # Assuming all required objects are available
+#' output_with_fs <- df_add_fs_out(sim_output_df, flep_to_f_map, f_max_values, waa_data)
+#' }
+df_add_fs_out <- function(input_df,
+                          spec_fleps_2_fs,
+                          F_maxes_yield,
+                          waa_g_df) {
+  
+  # Returns a dataframe with a columns of F(ishing mortality) values that correspond to (produce) FLEP 
+  # (Fraction of lifetime egg production) values
+  
+  stopifnot(colnames(input_df) == c("sim_num", "reserve_frac", "flep_ratio",
+                                    "year", "age", "abundance", "yield"))
+  out_fs <- input_df %>%
+    dplyr::left_join(., y = spec_fleps_2_fs, by = join_by(flep_ratio == flep_vals_ch)) %>%
+    dplyr::mutate(f_fmsy = round(f_vals / F_maxes_yield, 2)) %>%
+    dplyr::left_join(., y = waa_g_df, join_by(age == age)) %>%
+    dplyr::mutate(biomass_at_age = (abundance * waa_g) / 1E6)
+  
+}
 
-  sdmn_frac_recs_below_threshold <- sdn_recs %>%
-    dplyr::mutate(flep_ratio = as.character(flep_ratio)) %>%
-    dplyr::left_join(
-      x = .,
-      y = fleps_2_fs[, c("flep_vals_ch", "f_vals")],
-      by = c("flep_ratio" = "flep_vals_ch")
-    )  %>%
-    dplyr::mutate(f_fmsy = f_vals / F_max_yield_reg_sd) %>%
-    dplyr::group_by(year, reserve_frac, f_fmsy) %>%
-    dplyr::summarize(ann_recruits = sum(number, na.rm = TRUE)) %>%
+#' Calculates the mean of median annual yield at F_MSY with no reserves
+#'
+#' @description
+#' This function calculates the mean of median annual yield across simulations
+#' for scenarios where fishing mortality is at F_MSY and there are no marine
+#' reserves.
+#'
+#' @param input_df A data frame containing simulation output, with specific
+#'   columns (see Details).
+#'
+#' @return
+#' A single numeric value representing the mean of median annual yield across
+#' simulations under the specified conditions.
+#'
+#' @details
+#' The input data frame is expected to have the following columns:
+#'   - sim_num: Simulation number
+#'   - reserve_frac: Reserve fraction
+#'   - flep_ratio: FLEP ratio
+#'   - year: Year
+#'   - age: Age
+#'   - abundance: Abundance
+#'   - yield: Yield
+#'   - flep_vals: FLEP values
+#'   - f_vals: Fishing mortality values
+#'   - f_fmsy: F/F_MSY
+#'   - waa_g: Weight-at-age (in grams)
+#'   - biomass_at_age: Biomass at age (in tonnes)
+#'
+#' @note
+#' This function assumes that the input data frame has been processed by the
+#' `df_add_fs_out` function to include the necessary columns.
+#'
+#' @examples
+#' \dontrun{
+#' # Assuming a processed data frame is available
+#' median_yield_at_fmsy <- get_median_yield(processed_sim_output)
+#' }
+get_median_yield <- function(input_df) {
+  # returns the mean of median yield at at F = F_msy 
+  # for a coastline with no reserves across sims
+  stopifnot(colnames(input_df) == c("sim_num", "reserve_frac", "flep_ratio",
+                                    "year", "age", "abundance", "yield", 
+                                    "flep_vals", "f_vals", 
+                                    "f_fmsy", "waa_g", "biomass_at_age"))
+  
+  med_yield <- input_df %>%
+    dplyr::filter(near(f_fmsy, 1), near(as.numeric(reserve_frac), 0))  %>%
+    dplyr::group_by(sim_num,
+                    reserve_frac,
+                    f_fmsy,
+                    year) %>%
+    dplyr::summarise(ann_yield = sum(yield)) %>%
     dplyr::ungroup() %>%
-    dplyr::arrange(reserve_frac, f_fmsy, year) %>%
-    dplyr::mutate(below_threshold = ann_recruits <= rec_threshold) %>%
+    dplyr::group_by(sim_num) %>%
+    dplyr::summarise(med_ann_yield = median(ann_yield)) %>%
+    dplyr::ungroup() %>%
+    dplyr::summarise(avg_med_yield_f_fmsy = mean(med_ann_yield)) %>%
+    .$avg_med_yield_f_fmsy
+  return(med_yield)
+}
+
+
+#' Calculates the mean of median biomass at F_MSY with no reserves
+#'
+#' @description
+#' This function calculates the mean of median biomass across simulations
+#' for scenarios where fishing mortality is at F_MSY and there are no marine
+#' reserves.
+#'
+#' @param input_df A data frame containing simulation output, with specific
+#'   columns (see Details).
+#'
+#' @return
+#' A single numeric value representing the mean of median biomass across
+#' simulations under the specified conditions.
+#'
+#' @details
+#' The input data frame is expected to have the same columns as required for
+#' the `get_median_yield` function (see its documentation for details).
+#'
+#' @note
+#' This function assumes that the input data frame has been processed by the
+#' `df_add_fs_out` function to include the necessary columns.
+#'
+#' @examples
+#' \dontrun{
+#' # Assuming a processed data frame and age matrix are available
+#' median_biomass_at_fmsy <- get_median_biomass(processed_sim_output, age_matrix)
+#' }
+
+get_median_biomass <- function(input_df) {
+  # returns the mean of median abundance at at F = F_msy 
+  # for a coastline with no reserves across sims
+  stopifnot(colnames(input_df) == c("sim_num", "reserve_frac", "flep_ratio",
+                                    "year", "age", "abundance", "yield", 
+                                    "flep_vals", "f_vals", 
+                                    "f_fmsy", "waa_g", "biomass_at_age"))
+  
+  med_biomass <- input_df %>%
+    dplyr::filter(near(f_fmsy, 1), near(as.numeric(reserve_frac), 0))  %>%
+    dplyr::group_by(sim_num,
+                    reserve_frac,
+                    f_fmsy,
+                    year) %>%
+    dplyr::summarise(ann_biomass = sum(biomass_at_age)) %>% 
+    dplyr::ungroup() %>%
+    dplyr::group_by(sim_num) %>%
+    dplyr::summarise(med_ann_biomass = median(ann_biomass)) %>%
+    dplyr::ungroup() %>%
+    dplyr::summarise(avg_med_biomass_f_fmsy = mean(med_ann_biomass)) %>%
+    .$avg_med_biomass_f_fmsy
+  return(med_biomass)
+}
+
+#' Calculates annual yield and biomass for different fishing mortality, reserve fractions, and years
+#'
+#' @description
+#' This function takes a simulation output data frame and calculates annual
+#' yield and biomass, aggregated by simulation number, reserve fraction,
+#' F/F_MSY, and year.
+#'
+#' @param input_df A data frame containing simulation output, with specific
+#'   columns (see Details).
+#'
+#' @return
+#' A data frame with columns for sim_num, reserve_frac, f_fmsy, year,
+#' annual_yield, and annual_biomass.
+#'
+#' @details
+#' The input data frame is expected to have the same columns as required for
+#' the `get_median_yield` and `get_median_biomass` functions (see their
+#' documentation for details).
+#'
+#' @note
+#' This function assumes that the input data frame has been processed by the
+#' `df_add_fs_out` function to include the necessary columns.
+#'
+#' @examples
+#' \dontrun{
+#' # Assuming a processed data frame and age at maturity are available
+#' yield_biomass_stats <- df_yld_bm_stats_by_sim_f_frac_year(input_df = processed_sim_output)
+#' }
+
+df_yld_bm_stats_by_sim_f_frac_year <- function(input_df) {
+  
+  stopifnot(colnames(input_df) == c("sim_num", "reserve_frac", "flep_ratio",
+                                    "year", "age", "abundance", "yield", 
+                                    "flep_vals", "f_vals", 
+                                    "f_fmsy", "waa_g", "biomass_at_age"))
+  
+  out_df <- input_df %>%
+    dplyr::group_by(sim_num, reserve_frac, f_fmsy, year) %>%
+    dplyr::summarize(annual_yield = sum(yield), 
+                     annual_biomass = sum(biomass_at_age)) %>%
+    dplyr::ungroup()
+  return(out_df)
+}
+
+#' Calculates summary statistics for yield and biomass by fishing mortality and reserve fraction
+#'
+#' @description
+#' This function takes a data frame with annual yield and biomass, along with
+#' reference median yield and biomass values, and calculates various summary
+#' statistics, aggregated by simulation number, fishing mortality (F/F_MSY),
+#' and reserve fraction.
+#'
+#' @param out_sim_f_frac_yr A data frame containing annual yield and biomass
+#'   data, with columns for sim_num, reserve_frac, f_fmsy, year, annual_yield,
+#'   and annual_biomass.
+#' @param median_yield A numeric value representing the median yield to compare against.
+#' @param median_biomass A numeric value representing the median biomass to compare against.
+#'
+#' @return
+#' A list containing two data frames:
+#'   - sim_f_frac_df: A data frame with summary statistics for each simulation,
+#'     reserve fraction, and F/F_MSY combination.
+#'   - summ_f_frac_df: A data frame with summary statistics aggregated across
+#'     simulations for each reserve fraction and F/F_MSY combination, including
+#'     labels for plotting.
+#'
+#' @note
+#' This function assumes that the input data frame has been processed by the
+#' `df_yld_bm_stats_by_sim_f_frac_year` function to include the necessary columns.
+#'
+#' @examples
+#' \dontrun{
+#' # Assuming processed data frames and median values are available
+#' summary_data <- summary_stats_by_f_frac(out_sim_f_frac_yr = yield_biomass_stats, 
+#'                                        median_yield = med_yield, 
+#'                                        median_biomass = med_biomass)
+#' }
+summary_stats_by_f_frac <- function(out_sim_f_frac_yr,
+                                    median_yield,
+                                    median_biomass
+) {
+  sim_f_frac_df <- out_sim_f_frac_yr %>%
+    dplyr::mutate(below_thresh_yld = if_else(annual_yield <= median_yield, 1, 0),
+                  below_thresh_bm = if_else(annual_biomass <= median_biomass, 1, 0),
+                  rel_annual_yield = annual_yield / median_yield,
+                  rel_annual_biomass = annual_biomass / median_biomass) %>%
+    dplyr::group_by(sim_num, reserve_frac, f_fmsy) %>%
+    dplyr::summarise(
+      mean_yield = round(mean(annual_yield, na.rm = TRUE), 2),
+      mean_biomass = round(mean(annual_biomass, na.rm = TRUE), 2),
+      mean_rel_yield = round(mean(rel_annual_yield, na.rm = TRUE), 2),
+      mean_rel_biomass = round(mean(rel_annual_biomass, na.rm = TRUE), 2),
+      sd_yield = round(sd(annual_yield, na.rm = TRUE), 2),
+      sd_biomass = round(sd(annual_biomass, na.rm = TRUE), 2),
+      sd_rel_yield =   round(sd(rel_annual_yield, na.rm = TRUE), 2),
+      sd_rel_biomass = round(sd(rel_annual_biomass, na.rm = TRUE), 2),
+      cv_yield = round(sd(annual_yield, na.rm = TRUE)/mean(annual_yield, na.rm = TRUE), 2),
+      cv_biomass = round(sd(annual_biomass, na.rm = TRUE)/mean(annual_biomass, na.rm = TRUE), 2),
+      cv_rel_yield = round(sd(rel_annual_yield, na.rm = TRUE)/mean(rel_annual_yield, na.rm = TRUE), 2),
+      cv_rel_biomass = round(sd(rel_annual_biomass, na.rm = TRUE)/mean(rel_annual_biomass, na.rm = TRUE), 2),
+      yrs_below_yield_thresh = sum(below_thresh_yld)/135,
+      yrs_below_biomass_thresh = sum(below_thresh_bm)/135
+    ) %>%
+    dplyr::ungroup() 
+  
+  summ_f_frac_df <- sim_f_frac_df %>%
     dplyr::group_by(reserve_frac, f_fmsy) %>%
-    dplyr::summarize(num_below_threshold = sum(below_threshold), 
-                     frac_below_threshold = num_below_threshold/sim_len)
+    dplyr::summarize(
+      mean_yield = round(mean(mean_yield, na.rm = TRUE), 2),
+      mean_yield_lab = paste0("Mean yield: ", mean_yield),
+      mean_rel_yield = round(mean(mean_rel_yield, na.rm = TRUE), 2),
+      mean_rel_yield_lab = paste0("Mean relative yield: ", mean_rel_yield),
+      mean_biomass = round(mean(mean_biomass, na.rm = TRUE), 2),
+      mean_biomass_lab = paste0("Mean biomass: ", mean_biomass),
+      mean_rel_biomass = round(mean(mean_rel_biomass, na.rm = TRUE), 2),
+      mean_rel_biomass_lab = paste0("Mean relative biomass: ", mean_rel_biomass),
+      sd_yield = round(mean(sd_yield, na.rm = TRUE), 2),
+      sd_yield_lab = paste0("SD yield: ", sd_yield),
+      sd_rel_yield = round(mean(sd_rel_yield, na.rm = TRUE), 2),
+      sd_rel_yield_lab = paste0("SD relative yield: ", sd_rel_yield),
+      sd_biomass = round(mean(sd_biomass, na.rm = TRUE), 2),
+      sd_biomass_lab = paste0("SD biomass: ", sd_yield),
+      sd_rel_biomass = round(mean(sd_rel_biomass, na.rm = TRUE), 2),
+      sd_rel_biomass_lab = paste0("SD relative biomass: ", sd_rel_biomass),
+      cv_yield = round(mean(cv_yield, na.rm = TRUE), 2),
+      cv_yield_lab = paste0("CV yield: ", cv_yield),
+      cv_rel_yield = round(mean(cv_rel_yield, na.rm = TRUE), 2),
+      cv_rel_yield_lab = paste0("CV relative yield: ", cv_rel_yield),
+      cv_biomass = round(sd(cv_biomass, na.rm = TRUE), 2),
+      cv_biomass_lab = paste0("CV biomass: ", cv_biomass),
+      cv_rel_biomass = round(sd(cv_rel_biomass, na.rm = TRUE), 2),
+      cv_rel_biomass_lab = paste0("CV relative biomass: ", cv_rel_biomass),
+      yrs_below_yield_thresh =  mean(yrs_below_yield_thresh),
+      yrs_below_yield_thresh_lab = paste("% YR below yield thresh: ", round(yrs_below_yield_thresh, 4)),
+      yrs_below_biomass_thresh = mean(yrs_below_biomass_thresh),
+      yrs_below_biomass_thresh_lab = paste("% YR below biomass thresh: ", round(yrs_below_biomass_thresh, 4))
+    ) %>%
+    ungroup()
+  return(list(sim_f_frac_df, summ_f_frac_df))
 }
 
-sdmn_calc_gradient_vector_recs <- function(sdmn_frac_recs, rec_threshold) {
-  
-  # sdmn_frac_recs_below_threshold <- sdmn_frac_recs %>%
-  #   dplyr::mutate(flep_ratio = as.character(flep_ratio)) %>%
-  #   dplyr::left_join(
-  #     x = .,
-  #     y = fleps_2_fs[, c("flep_vals_ch", "f_vals")],
-  #     by = c("flep_ratio" = "flep_vals_ch")
-  #   )  %>%
-  #   dplyr::mutate(f_fmsy = f_vals / F_max_yield_reg_sd) %>%
-  #   dplyr::group_by(year, reserve_frac, f_fmsy) %>%
-  #   dplyr::summarize(ann_recruits = sum(number, na.rm = TRUE)) %>%
-  #   dplyr::ungroup() %>%
-  #   dplyr::arrange(reserve_frac, f_fmsy, year) %>%
-  #   dplyr::mutate(below_threshold = ann_recruits <= rec_threshold) %>%
-  #   dplyr::group_by(reserve_frac, f_fmsy) %>%
-  #   dplyr::summarize(num_below_threshold = sum(below_threshold), 
-  #             frac_below_threshold = num_below_threshold/sim_len)
-  
-  sdmn_frac_recs_below_threshold_w <- sdmn_frac_recs %>%
-    tidyr::pivot_wider(id_cols = reserve_frac,
-                names_from = f_fmsy,
-                names_prefix = "f_flep_",
-                values_from = frac_below_threshold)
-  
-  sdmn_frac_recs_below_threshold_mat <- as.matrix(sdmn_frac_recs_below_threshold_w[,2:ncol(sdmn_frac_recs_below_threshold_w)])
-  
-  rr <- row(sdmn_frac_recs_below_threshold_mat)
-  cc <- col(sdmn_frac_recs_below_threshold_mat)
-  dx <- t(apply(sdmn_frac_recs_below_threshold_mat, 1, bdiff))
-  dy <- apply(sdmn_frac_recs_below_threshold_mat, 2, bdiff)
-  
-  
-  ## wrangle to a single long-df for ggplot2
-  
-  f_vals <- unique(sdmn_frac_recs$f_fmsy)
-  res_vals <- unique(sdmn_frac_recs$reserve_frac)
-  
-  dx_tib <- tibble(data.frame(dx))
-  dx_tib$reserve_frac <- as.character(res_vals)
-  
-  names(dx_tib)[1] <- "f_flep_0.0000000"
-  dx_tib <- pivot_longer(dx_tib, cols = c(starts_with("f_flep_")), 
-                         names_to = "f_fmsy",  values_to = "dx") %>%
-    mutate(f_fmsy = substr(as.character(substring(f_fmsy, first = 8)), 1, 10))
-  
-  
-  dy_tib <- tibble(data.frame(dy))
-  dy_tib$reserve_frac <- as.character(res_vals)
-  dy_tib <- dy_tib %>%
-    tidyr::pivot_longer(., cols = c(starts_with("f_flep_")), 
-                 names_to = "f_fmsy",  values_to = "dy") %>%
-    dplyr::mutate(f_fmsy = substr(as.character(substring(f_fmsy, first = 8)), 1, 10))
-  
-  sdmn_frac_recs_below_threshold_out <- sdmn_frac_recs %>%
-    dplyr::mutate(reserve_frac = as.character(reserve_frac), 
-           f_fmsy = as.character(f_fmsy),
-           f_fmsy = substr(f_fmsy, 1, 10)) %>%
-    dplyr::left_join(., dx_tib, by = c("reserve_frac", "f_fmsy")) %>%
-    dplyr::left_join(., dy_tib, by = c("reserve_frac", "f_fmsy"))
-  
-  return(sdmn_frac_recs_below_threshold_out)
-}
-
-
-plt_sdmn_frac_recs_below_threshold_out <- function(plt_dat, species,
-                                                   dispersal, noise,
-                                                   max_res_frac = 0.5, 
-                                                   max_f_fmsy = 2) {
-  plt_dat %>%
-    dplyr::mutate(reserve_frac = as.numeric(reserve_frac),
-           f_fmsy = as.numeric(f_fmsy)) %>%
-    dplyr::filter(reserve_frac <= max_res_frac, f_fmsy <= max_f_fmsy) %>%
-    dplyr::mutate(f_fmsy = if_else(f_fmsy == 0, "0.0000000", 
-                            as.character(f_fmsy)),
-           reserve_frac = as.character(reserve_frac)) %>%
-    dplyr::mutate(reserve_frac = as.numeric(reserve_frac),
-           f_fmsy = as.numeric(f_fmsy)) %>%
-    dplyr::mutate(end_x = reserve_frac + (dx * 0.9), 
-           end_y = f_fmsy + (dy * 0.9)) %>%
-    ggplot(data = .,
-           aes(x = reserve_frac, y = f_fmsy, z = frac_below_threshold)) +
-    geom_contour_filled(bins = 12) +
-    ggtitle(paste0(species, " ", dispersal," ", noise, " - time below median recruits")) +
-    xlab("Reserve fraction") +
-    ylab("F/Fmsy") +
-    # guides(fill="none") + 
-    scale_fill_viridis_d(option = "D", direction = -1) +
-    geom_segment(aes(x = reserve_frac,
-                     y = f_fmsy,
-                     xend = end_x, 
-                     yend = end_y),
-                 arrow = arrow(length = unit(0.1,"cm"))) +
-    geom_segment(aes(x=0,xend=0.5,y=1,yend=1), colour = "red") +
-    scale_x_continuous(expand = expansion(add = 0), limits = c(0, 0.5)) +
-    scale_y_continuous(expand = expansion(add = 0), limits = c(0, 2)) +
-    theme_bw()
-  
-}
-
-plt_sdmn_frac_recs_below_threshold_out2 <- function(dat,
-                                                    species, 
-                                                    dispersal, 
-                                                    noise,
-                                                    scale = 0.5) {
-  
-  x_labs <- sort(unique(dat$reserve_frac))
-  y_labs <- sort(unique(dat$f_fmsy))
-  
-  dat2 <- dat[, c("reserve_frac", "f_fmsy", "frac_below_threshold")]
-  names(dat2) <- c("x", "y", "value")
-  
-  dat_mat <- as.matrix(tidyr::pivot_wider(dat2, names_from = y, values_from = value))
-  
-  plt_dat <- as.cimg(dat_mat[,-c(1)])
-  plt_dat_gr <- imgradient(plt_dat, "xy")
-  names(plt_dat_gr) <- c("dx", "dy")
-  
-  plt_dat_gr_df <- as.data.frame(plt_dat_gr)
-  plt_dat_gr_df_w <- tidyr::spread(data = plt_dat_gr_df, im, value)
-  plt_dat_gr_df_w_plt <- plt_dat_gr_df_w %>%
-    mutate(., xend = (x-dx/sd(dx) * scale),
-           yend = y-(dy/sd(dy) * scale))
-  
-  plt_dat_gr_df_w_plt <- bind_cols(dat[, c("reserve_frac", "f_fmsy", "frac_below_threshold")],
-                                   plt_dat_gr_df_w_plt)
-  
-  p <- ggplot(plt_dat_gr_df_w_plt %>% dplyr::filter((x %% 2) ==0,(y %% 2) == 0), aes(x = x, y = y)) +
-    geom_raster(data = as.data.frame(plt_dat), aes(x=x, y=y, fill=value),
-                alpha = 0.85) +
-    scale_fill_viridis_c(option = "D", direction = -1, limits = c(0,1)) +
-    geom_segment(aes(xend = xend, yend = yend),
-                 arrow = arrow(length = unit(0.01, "npc")),
-                 col = "black") +
-    scale_x_continuous(expand = c(0,-0.5), limits = c(0, 12),
-                       breaks = sort(unique(plt_dat_gr_df_w_plt$x)),
-                       labels = x_labs) +
-    scale_y_continuous(expand = c(0,-0.5), limits = c(3, 30),
-                       breaks = sort(unique(plt_dat_gr_df_w_plt$y)),
-                       labels = round(y_labs, 2)
-                       # breaks = sort(unique(plt_dat_gr_df_w_plt$y)), labels = round(y_labs, 2)
-                       ) +
-    geom_hline(yintercept = 1, colour = "red") +
-    ggtitle(paste0(species, " ", dispersal," ", noise, " - time below recruit threshold (fraction of years)")) +
-    xlab("Reserve fraction") +
-    ylab("F/Fmsy") +
-    theme_bw()
-  return(print(p))
-}
-
-## Recs diffs: lp - nd
-plt_sdmn_recs_lp_diff_nd_gradvec_cont2 <- function(dat,
-                                                    species, 
-                                                    noise,
-                                                    scale = 0.5) {
-  
-  x_labs <- sort(unique(dat$reserve_frac))
-  y_labs <- sort(unique(dat$f_fmsy))
-  
-  dat2 <- dat[, c("reserve_frac", "f_fmsy", "frac_below_threshold_rec_diffs")]
-  names(dat2) <- c("x", "y", "value")
-  
-  dat_mat <- as.matrix(tidyr::pivot_wider(dat2, names_from = y, values_from = value))
-  
-  plt_dat <- as.cimg(dat_mat[,-1])
-  plt_dat_gr <- imgradient(plt_dat, "xy")
-  names(plt_dat_gr) <- c("dx", "dy")
-  
-  plt_dat_gr_df <- as.data.frame(plt_dat_gr)
-  plt_dat_gr_df_w <- tidyr::spread(data = plt_dat_gr_df, im, value)
-  plt_dat_gr_df_w_plt <- plt_dat_gr_df_w %>%
-    mutate(., xend = x-(dx/sd(dx) * scale),
-           yend = y-(dy/sd(dy) * scale))
-  
-  plt_dat_gr_df_w_plt <- bind_cols(dat[, c("reserve_frac", "f_fmsy", "frac_below_threshold_rec_diffs")],
-                                   plt_dat_gr_df_w_plt)
-  
-  p <- ggplot(plt_dat_gr_df_w_plt, aes(x = x, y = y)) + # %>% dplyr::filter(., x %% 2 == 0, y %% 2 == 0)
-    geom_raster(data = as.data.frame(plt_dat), aes(x=x, y=y, fill=value),
-                alpha = 0.85,) +
-    scale_fill_gradient2(low = "#440154", mid = "#21918c", high = "#fde725", midpoint = 0,
-                         guide = guide_colourbar(title = "")) +
-    # scale_fill_gradient2(low = "#fde725", mid = "#21918c", high = "#440154", midpoint = 0,
-    #                      guide = guide_colourbar(title = "")) +
-    geom_segment(aes(xend = xend, yend = yend),
-                 arrow = arrow(length = unit(0.01, "npc")),
-                 col="black") +
-    scale_x_continuous(expand = c(0,-0.5), limits = c(0, 12),
-                       breaks = sort(unique(plt_dat_gr_df_w_plt$x)),
-                       labels = x_labs) +
-    scale_y_continuous(expand = c(0,-0.5), limits = c(0, 30),
-                       breaks = sort(unique(plt_dat_gr_df_w_plt$y)),
-                       labels = round(y_labs, 2)) + 
-    geom_hline(yintercept = 1, colour = "red") +
-    # breaks = sort(unique(plt_dat_gr_df_w_plt$y)), labels = round(y_labs, 2)) +
-    ggtitle(paste0(species, " difference in time below median recruitment leve (fraction of years) \n", noise, " noise between larval pool and no dispersal")) +
-    xlab("Reserve fraction") +
-    ylab("F/Fmsy") +
-    theme_bw()
-  
-  return(print(p))
-}
