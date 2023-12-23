@@ -646,207 +646,7 @@ ggsave(
 )
 ```
 
-### Figure 3 - white noise check
-
-Contour plots showing the buffering effects of harvest rate and marine reserves on the abundance of a fished population, when there is no larval dispersal between the fished and reserve habitat patches.
-
-Species: Blue rockfish
-
-Dispersal: no dispersal
-
-Environmental noise: white noise
-
-```{r}
-
-
-
-```
-
-### Figure 4 - white noise check
-
-Contour plots showing the buffering effects of harvest rate and marine reserves on the abundance of a fished population, when there is larval pool dispersal between the fished and reserve habitat patches.
-
-Species: Blue rockfish
-
-Dispersal: Larval Pool Dispersal
-
-Environmental noise: White
-
-```{r}
-
-
-
-# 
-# ggsave(filename = "output/tmp_figs/fig4-yield-white-noise-chk.png", plot = p1)
-# ggsave(filename = "output/tmp_figs/fig4-biomass-white-noise-chk.png", plot = p2)
-
-```
-
-### Cabezon
-
-```{r}
-# # Set table names to be used to make the main figures
-# 
-# table_name_nd <- "no_dispersal_cabezon_mei_135_75"
-# table_name_lp <- "larval_pool_cabezon_mei_135_75"
-# table_name_nd_white <- "no_dispersal_abezon_white_135_75"
-# table_name_lp_white <- "larval_pool_cabezon_white_135_75"
-# 
-# # Get meta data descriptins from the table names and the pretty 
-# # versions for plotting
-# 
-# cab_mei_nd_current <- get_current_exp(table_name = table_name_nd)
-# cab_mei_nd_nice <- get_nice_exp(table_name = table_name_nd)
-# cab_white_nd_current <- get_current_exp(table_name = table_name_nd_white)
-# cab_white_nd_nice <- get_nice_exp(table_name = table_name_nd_white)
-# cab_mei_lp_current <- get_current_exp(table_name = table_name_lp)
-# cab_mei_lp_nice <- get_nice_exp(table_name = table_name_lp)
-# cab_white_lp_current <- get_current_exp(table_name = table_name_lp_white)
-# cab_white_lp_nice <- get_nice_exp(table_name = table_name_lp_white)
-# 
-
-```
-
-### Figure 3 - MEI Cabezon
-
-Contour plots showing the buffering effects of harvest rate and marine reserves on the abundance of a fished population, when there is no larval dispersal between the fished and reserve habitat patches.
-
-Species: Cabezon
-
-Dispersal: No Dispersal
-
-Environmental noise: ENSO (MEI)
-
-```{r}
-#| label: figure_3
-# 
-# # use species specific vB params to create a weight at age data.frame that can be used to convert abundance at age to biomass at age
-# species_name <- cab_mei_nd_nice[[2]]
-# brf_waa_g <- sim_species_parms[[species_name]][["biom_const"]] * sim_species_derived_vars[[species_name]][["length_at_age"]] ^
-#                     sim_species_parms[[species_name]][["biom_exp"]]
-# 
-# brf_waa_g_df <- data.frame(age = 1: sim_species_parms[[species_name]]$A_max,
-#                            waa_g = brf_waa_g)
-# 
-# # use functions to create useful data structures
-# # FLEP to F reference tables by species
-# spec_fleps_2_fs <-
-#   get_fs_from_fleps(species = species_name,
-#                     flep_inds = species_flep_fished_ind,
-#                     f_vals =  fishing_mortality_values) 
-# 
-# ## Qry 
-# qry <- paste0("SELECT  sim_num, reserve_frac, flep_ratio, year, age, 
-#               sum(number) as abundance,
-#               sum(yield) as yield,
-#               FROM '", table_name_nd, 
-#               "' WHERE sim_num IN (", toString(sims_2_use), ") AND year > 500 
-#               GROUP BY sim_num, reserve_frac, flep_ratio, year, age
-#               ORDER BY sim_num, reserve_frac, flep_ratio, year, age
-#               ")
-# 
-# sim_res_out <- dbGetQuery(conn = con, qry)
-# 
-# #######
-# 
-# 
-# ########### PIPELINING
-# F_brf_maxes_yield <- get_f_maxes_yield(input_df = sim_res_out,
-#                                          fleps_2_fs = spec_fleps_2_fs)
-# F_brf_maxes_yield
-# 
-# out_fs <- df_add_fs_out (input_df = sim_res_out,
-#                          spec_fleps_2_fs = spec_fleps_2_fs,
-#                          F_maxes_yield = F_brf_maxes_yield, waa_g_df = brf_waa_g_df)
-# out_fs
-# 
-# med_yield <- get_median_yield(input_df = out_fs) 
-# med_yield
-# 
-# med_biomass <- get_median_biomass(input_df = out_fs, age_mat = sim_species_parms$`Blue rockfish`$A_mat)
-# med_biomass
-# 
-# out_yld_bm_sims_f_frac_yr <-
-#   df_yld_bm_stats_by_sim_f_frac_year(input_df = out_fs,
-#                                      age_mat = sim_species_parms$`Blue rockfish`$A_mat)#, sims_num_2_use = sims_2_use
-# 
-# # out_yld_bm_sims_f_frac_yr
-# # pipeline works to here
-# 
-# sum_stats_f_frac_df <-
-#   summary_stats_by_f_frac(
-#     out_sim_f_frac_yr = out_yld_bm_sims_f_frac_yr,
-#     median_yield = med_yield,
-#     median_biomass = med_biomass
-#   )
-# sum_stats_f_frac_df
-# 
-# ## Plotting
-# 
-# p1 <- sum_stats_f_frac_df[[2]] %>%
-#   filter(as.numeric(reserve_frac) <= max_reserve_frac, f_fmsy <= max_f_fmsy) %>%
-#   ggplot(.,
-#        aes(x = as.numeric(reserve_frac), y = f_fmsy, z = yrs_below_yield_thresh)) +
-#   metR::geom_contour_fill(bins = 12) + 
-#   ggtitle(paste0(
-#         cab_mei_nd_nice[[2]],
-#         " ",
-#         cab_mei_nd_nice[[1]],
-#         " ",
-#         cab_mei_nd_nice[[3]],
-#         ":\nTime below median max yield"
-#       )) +
-#       xlab("Fraction of coastline in reserves") +
-#       ylab("Harvest Rate (F/Fmsy)") +
-#       scale_fill_viridis_c(option = "D", direction = -1) +
-#       geom_segment(aes(
-#         x = 0,
-#         xend = max_reserve_frac,
-#         y = 1,
-#         yend = 1
-#       ), colour = "black",
-#       linetype = 2) +
-#       scale_x_continuous(expand = expansion(mult = 0, add = 0), limits = c(0, 0.3)) +
-#       scale_y_continuous(expand = expansion(mult = 0, add = 0)) +
-#       theme_bw()
-# 
-# 
-# p2 <- sum_stats_f_frac_df[[2]] %>%
-#   filter(as.numeric(reserve_frac) <= max_reserve_frac, f_fmsy <= max_f_fmsy) %>%
-#   ggplot(.,
-#        aes(x = as.numeric(reserve_frac), y = f_fmsy, z = yrs_below_biomass_thresh)) +
-#   metR::geom_contour_fill(bins = 12) +
-#   ggtitle(paste0(
-#         cab_mei_nd_nice[[2]],
-#         " ",
-#         cab_mei_nd_nice[[1]],
-#         " ",
-#         cab_mei_nd_nice[[3]],
-#         ":\nTime below mean median biomass "
-#       )) +
-#       xlab("Fraction of coastline in reserves") +
-#       ylab("Harvest Rate (F/Fmsy)") +
-#       scale_fill_viridis_c(option = "D", direction = -1) +
-#       geom_segment(aes(
-#         x = 0,
-#         xend = max_reserve_frac,
-#         y = 1,
-#         yend = 1
-#       ), colour = "black",
-#       linetype = 2) +
-#       scale_x_continuous(expand = expansion(mult = 0, add = 0), limits = c(0, 0.3)) +
-#       scale_y_continuous(expand = expansion(mult = 0, add = 0)) +
-#       theme_bw()
-# 
-# print(p1)
-# print(p2)
-
-# ggsave(filename = "output/tmp_figs/fig3-yield-cab.png", plot = p1)
-# ggsave(filename = "output/tmp_figs/fig3-biomass-cab.png", plot = p2)
-
-```
-
-### Better funcs
+### Supplemental figure prep
 
 ```{r}
 
@@ -950,39 +750,29 @@ spec_fleps_2_fs_chr <-
                     flep_inds = species_flep_fished_ind,
                     f_vals =  fishing_mortality_values) 
 
-########### PIPELINING
-
 F_chr_nd_white_df_maxes_yield <- get_f_maxes_yield(input_df = chr_nd_white_df,
                                          fleps_2_fs = spec_fleps_2_fs_chr)
-F_chr_nd_white_df_maxes_yield
 
 F_cab_nd_white_df_maxes_yield <- get_f_maxes_yield(input_df = cab_nd_white_df,
                                          fleps_2_fs = spec_fleps_2_fs_cab)
-F_cab_nd_white_df_maxes_yield
 
 F_chr_lp_white_df_maxes_yield <- get_f_maxes_yield(input_df = chr_lp_white_df,
                                          fleps_2_fs = spec_fleps_2_fs_chr)
-F_chr_lp_white_df_maxes_yield
 
 F_cab_lp_white_df_maxes_yield <- get_f_maxes_yield(input_df = cab_lp_white_df,
                                          fleps_2_fs = spec_fleps_2_fs_cab)
-F_cab_lp_white_df_maxes_yield
 
 F_chr_nd_mei_df_maxes_yield <- get_f_maxes_yield(input_df = chr_nd_mei_df, 
                                                  fleps_2_fs = spec_fleps_2_fs_chr)
-F_chr_nd_mei_df_maxes_yield
 
 F_cab_nd_mei_df_maxes_yield <- get_f_maxes_yield(input_df = cab_nd_mei_df, 
                                                  fleps_2_fs = spec_fleps_2_fs_cab)
-F_cab_nd_mei_df_maxes_yield
 
 F_chr_lp_mei_df_maxes_yield <- get_f_maxes_yield(input_df = chr_lp_mei_df, 
                                                  fleps_2_fs = spec_fleps_2_fs_chr)
-F_chr_lp_mei_df_maxes_yield
 
 F_cab_lp_mei_df_maxes_yield <- get_f_maxes_yield(input_df = cab_lp_mei_df, 
                                                  fleps_2_fs = spec_fleps_2_fs_cab)
-F_cab_lp_mei_df_maxes_yield
 
 
 ##----##
@@ -992,25 +782,21 @@ chr_nd_white_out_fs <- df_add_fs_out (input_df = chr_nd_white_df,
                          spec_fleps_2_fs = spec_fleps_2_fs_chr,
                          F_maxes_yield = F_chr_nd_white_df_maxes_yield, 
                          waa_g_df = chr_waa_g_df)
-chr_nd_white_out_fs[1:6,]
 
 cab_nd_white_out_fs <- df_add_fs_out (input_df = cab_nd_white_df,
                          spec_fleps_2_fs = spec_fleps_2_fs_cab,
                          F_maxes_yield = F_cab_nd_white_df_maxes_yield, 
                          waa_g_df = cab_waa_g_df)
-cab_nd_white_out_fs[1:6,]
 # enso
 chr_nd_mei_out_fs <- df_add_fs_out (input_df = chr_nd_mei_df ,
                          spec_fleps_2_fs = spec_fleps_2_fs_chr,
                          F_maxes_yield = F_chr_nd_mei_df_maxes_yield, 
                          waa_g_df = chr_waa_g_df)
-chr_nd_mei_out_fs[1:6,]
 
 cab_nd_mei_out_fs <- df_add_fs_out (input_df = cab_nd_mei_df,
                          spec_fleps_2_fs = spec_fleps_2_fs_cab,
                          F_maxes_yield = F_cab_nd_mei_df_maxes_yield, 
                          waa_g_df = cab_waa_g_df)
-cab_nd_mei_out_fs[1:6,]
 
 # Larval pool
 # white
@@ -1018,84 +804,66 @@ chr_lp_white_out_fs <- df_add_fs_out (input_df = chr_lp_white_df,
                          spec_fleps_2_fs = spec_fleps_2_fs_chr,
                          F_maxes_yield = F_chr_lp_white_df_maxes_yield, 
                          waa_g_df = chr_waa_g_df)
-chr_lp_white_out_fs[1:6,]
 
 cab_lp_white_out_fs <- df_add_fs_out (input_df = cab_lp_white_df,
                          spec_fleps_2_fs = spec_fleps_2_fs_cab,
                          F_maxes_yield = F_cab_lp_white_df_maxes_yield, 
                          waa_g_df = cab_waa_g_df)
-cab_lp_white_out_fs[1:6,]
+
 # enso
 chr_lp_mei_out_fs <- df_add_fs_out (input_df = chr_lp_mei_df ,
                          spec_fleps_2_fs = spec_fleps_2_fs_chr,
                          F_maxes_yield = F_chr_lp_mei_df_maxes_yield, 
                          waa_g_df = chr_waa_g_df)
-chr_lp_mei_out_fs[1:6,]
 
 cab_lp_mei_out_fs <- df_add_fs_out (input_df = cab_lp_mei_df,
                          spec_fleps_2_fs = spec_fleps_2_fs_cab,
                          F_maxes_yield = F_cab_lp_mei_df_maxes_yield, 
                          waa_g_df = cab_waa_g_df)
-cab_lp_mei_out_fs[1:6,]
-
-##----##
 
 # White
 # No dispersal
 chr_nd_white_med_yield <- get_median_yield(input_df = chr_nd_white_out_fs) 
-chr_nd_white_med_yield
+
 cab_nd_white_med_yield <- get_median_yield(input_df = cab_nd_white_out_fs) 
-cab_nd_white_med_yield
+
 # larval pool dispersal 
 chr_lp_white_med_yield <- get_median_yield(input_df = chr_lp_white_out_fs) 
-chr_lp_white_med_yield
-cab_lp_white_med_yield <- get_median_yield(input_df = cab_lp_white_out_fs) 
-cab_lp_white_med_yield
 
+cab_lp_white_med_yield <- get_median_yield(input_df = cab_lp_white_out_fs) 
 
 # ENSO
 # No dispersal
 chr_nd_mei_med_yield <- get_median_yield(input_df = chr_nd_mei_out_fs) 
-chr_nd_mei_med_yield
+
 cab_nd_mei_med_yield <- get_median_yield(input_df = cab_nd_mei_out_fs) 
-cab_nd_mei_med_yield
+
 # larval pool dispersal
 chr_lp_mei_med_yield <- get_median_yield(input_df = chr_lp_mei_out_fs) 
-chr_lp_mei_med_yield
+
 cab_lp_mei_med_yield <- get_median_yield(input_df = cab_lp_mei_out_fs) 
-cab_lp_mei_med_yield
-
-##----##
-
-med_biomass <- get_median_biomass(input_df = out_fs)
 
 # White
 # No dispersal
 chr_nd_white_med_biomass <- get_median_biomass(input_df = chr_nd_white_out_fs) 
-chr_nd_white_med_biomass
-cab_nd_white_med_biomass <- get_median_biomass(input_df = cab_nd_white_out_fs) 
-cab_nd_white_med_biomass
-# larval pool dispersal 
-chr_lp_white_med_biomass <- get_median_biomass(input_df = chr_lp_white_out_fs) 
-chr_lp_white_med_biomass
-cab_lp_white_med_biomass <- get_median_biomass(input_df = cab_lp_white_out_fs) 
-cab_lp_white_med_biomass
 
+cab_nd_white_med_biomass <- get_median_biomass(input_df = cab_nd_white_out_fs) 
+
+chr_lp_white_med_biomass <- get_median_biomass(input_df = chr_lp_white_out_fs) 
+
+cab_lp_white_med_biomass <- get_median_biomass(input_df = cab_lp_white_out_fs) 
 
 # ENSO
 # No dispersal
 chr_nd_mei_med_biomass <- get_median_biomass(input_df = chr_nd_mei_out_fs) 
-chr_nd_mei_med_biomass
+
 cab_nd_mei_med_biomass <- get_median_biomass(input_df = cab_nd_mei_out_fs) 
-cab_nd_mei_med_biomass
+
 # larval pool dispersal
 chr_lp_mei_med_biomass <- get_median_biomass(input_df = chr_lp_mei_out_fs) 
-chr_lp_mei_med_biomass
+
 cab_lp_mei_med_biomass <- get_median_biomass(input_df = cab_lp_mei_out_fs) 
-cab_lp_mei_med_biomass
 
-
-##----##
 
 chr_nd_white_out_yld_bm_sims_f_frac_yr <-
   df_yld_bm_stats_by_sim_f_frac_year(input_df = chr_nd_white_out_fs)
@@ -1193,11 +961,18 @@ Biomass and yield contours for Blue rockfish
 # Dispersal: No Dispersal
 # Environmental noise: White
 
+p1 <-
+  plot_contour_bm_below_thresh(sum_stats_f_frac_df = ,
+                               spec_disp_noise = )
+
+p2 <-
+  plot_contour_yld_below_thresh(sum_stats_f_frac_df = ,
+                                spec_disp_noise = )
+
 
 con <- DBI::dbConnect(duckdb::duckdb(),
                         dbdir = "data/sim_out.duckdb",
                         read_only = FALSE)
-
 
 
 # use species specific vB params to create a weight at age data.frame that can be used to convert abundance at age to biomass at age
@@ -1227,10 +1002,6 @@ qry <- paste0("SELECT  sim_num, reserve_frac, flep_ratio, year, age,
 
 sim_res_out <- dbGetQuery(conn = con, qry)
 
-#######
-
-
-########### PIPELINING
 F_brf_maxes_yield <- get_f_maxes_yield(input_df = sim_res_out,
                                          fleps_2_fs = spec_fleps_2_fs)
 F_brf_maxes_yield
@@ -1454,11 +1225,11 @@ p_s1 <- plot_grid(p1, p2, p3, p4, labels = letters[1:4], label_size = 9, byrow =
 
 print(p_s1)
 
-ggsave(filename = "output/tmp_figs/sup_fig1-brf-biomass-yield-white-nd-lp.png", 
+ggsave(filename = "output/supp_figs/sup_fig1-brf-biomass-yield-white-nd-lp.png", 
        plot = p_s1, 
        width = 12,
        height = 8)
-ggsave(filename = "output/tmp_figs/sup_fig1-brf-biomass-yield-white-nd-lp.svg", 
+ggsave(filename = "output/supp_figs/sup_fig1-brf-biomass-yield-white-nd-lp.svg", 
        plot = p_s1, 
        width = 12,
        height = 8)
@@ -1601,11 +1372,11 @@ p4 <- cab_nd_mei_sum_stats_f_frac_df[[2]] %>%
 p_s2 <- plot_grid(p1, p2, p3, p4, labels = letters[1:4], label_size = 12, byrow = FALSE)
 
 print(p_s2)
-ggsave(filename = "output/tmp_figs/sup-fig2-cab-chr-nodisp-mei-yld-biom.png", 
+ggsave(filename = "output/supp_figs/sup-fig2-cab-chr-nodisp-mei-yld-biom.png", 
        plot = p_s2, 
        width = 12,
        height = 8)
-ggsave(filename = "output/tmp_figs/sup-fig2-cab-chr-nodisp-mei-yld-biom.svg", 
+ggsave(filename = "output/supp_figs/sup-fig2-cab-chr-nodisp-mei-yld-biom.svg", 
        plot = p_s2, 
        width = 12,
        height = 8)
@@ -1747,11 +1518,11 @@ p4 <- cab_lp_mei_sum_stats_f_frac_df[[2]] %>%
 p_s3 <- plot_grid(p1, p2, p3, p4, labels = letters[1:4], label_size = 12, byrow = FALSE)
 
 print(p_s3)
-ggsave(filename = "output/tmp_figs/sup-fig3-cab-chr-lp-disp-mei-yld-biom.png", 
+ggsave(filename = "output/supp_figs/sup-fig3-cab-chr-lp-disp-mei-yld-biom.png", 
        plot = p_s3, 
        width = 12,
        height = 8)
-ggsave(filename = "output/tmp_figs/sup-fig3-cab-chr-lp-disp-mei-yld-biom.svg", 
+ggsave(filename = "output/supp_figs/sup-fig3-cab-chr-lp-disp-mei-yld-biom.svg", 
        plot = p_s3, 
        width = 12,
        height = 8)
