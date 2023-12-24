@@ -4,6 +4,7 @@ source(file.path("R", "functions.R"))
 options(tidyverse.quiet = TRUE)
 tar_option_set(
   packages = c(
+    "renv",
     "tidyverse",
     "data.table",
     "duckdb",

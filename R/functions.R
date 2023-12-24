@@ -1415,3 +1415,389 @@ summary_stats_by_f_frac <- function(out_sim_f_frac_yr,
   return(list(sim_f_frac_df, summ_f_frac_df))
 }
 
+#' Retrieves simulation data from a DuckDB database table for subequent analyses
+#'
+#' @param table_name The name of the DuckDb table containing the simulation data.
+#'
+#' @return A data frame containing the retrieved simulation data, with columns:
+#' \itemize{
+#'   \item sim_num
+#'   \item reserve_frac
+#'   \item flep_ratio
+#'   \item year
+#'   \item age
+#'   \item abundance
+#'   \item yield
+#' }
+#'
+#' @details This function retrieves simulation data for years after a 500 yr burn-in period,
+#' aggregates results from both the fished and unfished patches and returns
+#'the results by simulation number, reserve fraction, FLEP ratio, year, and age.
+#'
+#' @examples
+#' table_name_brf_nd_mei <- "no_dispersal_blue_rockfish_mei_135_75"
+#' sim_data <- qry_get_sim_data_for_analysis(table_name = table_name_brf_nd_mei)
+#'
+#' @export
+
+qry_get_sim_data_for_analysis <- function(table_name) {
+    con <- DBI::dbConnect(duckdb::duckdb(),
+                          dbdir = "data/sim_out.duckdb",
+                          read_only = TRUE)
+    
+    qry <- paste0("SELECT  sim_num, reserve_frac, flep_ratio, year, age, 
+              sum(number) as abundance,
+              sum(yield) as yield,
+              FROM '", table_name, 
+                  "' WHERE year > 500 
+              GROUP BY sim_num, reserve_frac, flep_ratio, year, age
+              ORDER BY sim_num, reserve_frac, flep_ratio, year, age
+              ")
+    
+    sim_res_out <- dbGetQuery(conn = con, qry)
+    
+    DBI::dbDisconnect(conn = con)
+    
+    return(sim_res_out)
+  }
+
+#' Creates a contour plot of the fraction of years below a biomass threshold.
+#'
+#' @param sum_stats_f_frac_df A list of data frames where the second element 
+#'                            holds the data for the contour plot.
+#' @param spec_disp_noise_nice A list containing strings used for constructing the plot title.
+#' @param max_reserve_frac The maximum value for the reserve fraction on the x-axis.
+#'                         Default is 0.3.
+#' @param max_f_fmsy The maximum value for F/Fmsy on the y-axis. Default is 2.0.
+#'
+#' @return A ggplot object containing the contour plot.
+#'
+#'
+#' @examples
+#' p <- plot_contour_bm_below_thresh(sum_stats_f_frac_df, spec_disp_noise_nice)
+#' print(p)
+#'
+#' @export
+plot_contour_bm_below_thresh <- function(sum_stats_f_frac_df,
+                                         spec_disp_noise_nice,
+                                         max_reserve_frac = 0.3, 
+                                         max_f_fmsy = 2.0) {
+  p <- sum_stats_f_frac_df[[2]] %>%
+    filter(as.numeric(reserve_frac) <= max_reserve_frac, f_fmsy <= max_f_fmsy) %>%
+    ggplot(.,
+           aes(x = as.numeric(reserve_frac), y = f_fmsy, z = yrs_below_biomass_thresh)) +
+    metR::geom_contour_fill(bins = 12) +
+    ggtitle(paste0(
+      spec_disp_noise_nice[[2]],
+      " ",
+      spec_disp_noise_nice[[1]],
+      " ",
+      spec_disp_noise_nice[[3]],
+      ":\nTime below mean median biomass "
+    )) +
+    xlab("Fraction of coastline in reserves") +
+    ylab("Harvest Rate (F/Fmsy)") +
+    scale_fill_viridis_c(option = "D", direction = -1) +
+    geom_segment(aes(
+      x = 0,
+      xend = max_reserve_frac,
+      y = 1,
+      yend = 1
+    ), colour = "black",
+    linetype = 2) +
+    scale_x_continuous(expand = expansion(mult = 0, add = 0), limits = c(0, max_reserve_frac)) +
+    scale_y_continuous(expand = expansion(mult = 0, add = 0)) +
+    theme_bw()
+  
+  return(p)
+}
+
+
+#' Creates a contour plot of the fraction of years below a yield threshold.
+#'
+#' @param sum_stats_f_frac_df A list of data frames where the second element 
+#'                            holds the data for the contour plot.
+#' @param spec_disp_noise_nice A list containing strings used for constructing the plot title.
+#' @param max_reserve_frac The maximum value for the reserve fraction on the x-axis.
+#'                         Default is 0.3.
+#' @param max_f_fmsy The maximum value for F/Fmsy on the y-axis. Default is 2.0.
+#'
+#' @return A ggplot object containing the contour plot.
+#'
+#'
+#' @examples
+#' p <- plot_contour_yld_below_thresh(sum_stats_f_frac_df, spec_disp_noise_nice)
+#' print(p)
+#'
+#' @export
+plot_contour_yld_below_thresh <- function(sum_stats_f_frac_df,
+                                          spec_disp_noise_nice,
+                                          max_reserve_frac = 0.3, 
+                                          max_f_fmsy = 2.0) {
+  p <- sum_stats_f_frac_df[[2]] %>%
+    filter(as.numeric(reserve_frac) <= max_reserve_frac, f_fmsy <= max_f_fmsy) %>%
+    ggplot(.,
+           aes(x = as.numeric(reserve_frac), y = f_fmsy, z = yrs_below_yield_thresh)) +
+    metR::geom_contour_fill(bins = 12) + 
+    ggtitle(paste0(
+      spec_disp_noise_nice[[2]],
+      " ",
+      spec_disp_noise_nice[[1]],
+      " ",
+      spec_disp_noise_nice[[3]],
+      ":\nTime below median max yield"
+    )) +
+    xlab("Fraction of coastline in reserves") +
+    ylab("Harvest Rate (F/Fmsy)") +
+    scale_fill_viridis_c(option = "D", direction = -1) +
+    geom_segment(aes(
+      x = 0,
+      xend = max_reserve_frac,
+      y = 1,
+      yend = 1
+    ), colour = "black",
+    linetype = 2) +
+    scale_x_continuous(expand = expansion(mult = 0, add = 0), limits = c(0, max_reserve_frac)) +
+    scale_y_continuous(expand = expansion(mult = 0, add = 0)) +
+    theme_bw()
+  return(p)
+}
+
+
+#' Creates a faceted plot of biomass time series for a selected simulation run.
+#'
+#' @param bio_yield_df A data frame containing simulation results, including
+#'                     columns for: sim_num, reserve_frac, f_fmsy, year,
+#'                     biomass_at_age, yield, med_biomass, and med_yield.
+#' @param biomass_thresh A numeric value indicating the biomass threshold.
+#' @param exp_deets A list of strings providing details for the plot title:
+#'                   - Species  (e.g., "blue rockfish")
+#'                   - Dispersal  (e.g., "no dispersal")
+#'                   - Noise  (e.g., "white")
+#' @param r_seed An integer specifying the random seed for selecting a simulation run.
+#' @param frac_reserves A vector of reserve fractions to include in the plot.
+#' @param f_fmsys A vector of F/Fmsy values to include in the plot.
+#'
+#' @return A ggplot object containing the faceted biomass time series plot.
+#'
+#' @details This function:
+#' 1. Selects a random simulation run.
+#' 2. Filters data for specified reserve fractions and F/Fmsy values.
+#' 3. Calculates relative biomass and yield.
+#' 4. Creates a faceted plot with:
+#'   - Time series of relative biomass, with visual threshold indicator.
+#'   - Facets for different combinations of reserve fraction and F/Fmsy.
+#'
+#' @examples
+#' bio_ts_plot <- facet_plot_bm_ts_plots(bio_yield_df, exp_deets)
+#' print(bio_ts_plot)
+#'
+#' @export
+facet_plot_bm_ts_plots <- function(bio_yield_df,
+                                   biomass_thresh,
+                                   yield_thresh,
+                                   exp_deets,
+                                   r_seed = 34,
+                                   frac_reserves = c(0, 0.25, 0.50),
+                                   f_fmsys = c(0, 0.52, 1.00, 2.09)) {
+  # Randomly select a simulation run to plot
+  set.seed(r_seed)
+  sim_2_use <-
+    sample(sort(unique(bio_yield_df$sim_num)), 1, replace = FALSE)
+  
+  u_f_fmsys <- unique(bio_yield_df$f_fmsy)
+  
+  u_f_fmsys <-
+    purrr::map_dbl(f_fmsys,  ~ u_f_fmsys[which.min(abs(u_f_fmsys - .x))])
+  
+  x_text_val <- 135/2
+  
+  title_string <- paste0(
+    "Simulation results: \n",
+    exp_deets[[2]],
+    " with ",
+    exp_deets[[1]],
+    " dispersal and ",
+    exp_deets[[3]],
+    " noise. \n"
+  )
+  
+  bio_yield_sel_df <- bio_yield_df %>%
+    dplyr::mutate(reserve_frac = as.numeric(reserve_frac),
+                  year = year - 500) %>%
+    dplyr::filter(sim_num == sim_2_use) %>%
+    dplyr::filter(reduce(map(
+      frac_reserves, near, x = reserve_frac, tol = 1e-4
+    ), `|`)) %>%
+    dplyr::filter(reduce(map(
+      u_f_fmsys, near, x = f_fmsy, tol = 1e-4
+    ), `|`)) %>%
+    dplyr::group_by(sim_num, reserve_frac, f_fmsy, year) %>%
+    dplyr::summarize(
+      annual_biomass = sum(biomass_at_age),
+      annual_yield = sum(yield),
+      rel_annual_biomass = sum(biomass_at_age) / biomass_thresh,
+      rel_annual_yield = sum(yield) / yield_thresh
+    ) %>%
+    dplyr::ungroup()
+  
+  ### Biomass
+  biom_ts_plt <- ggplot(bio_yield_sel_df,
+                        aes(x = year, y = rel_annual_biomass)) +
+    facet_grid(reserve_frac ~ f_fmsy,
+               labeller = labeller(f_fmsy = label_both,
+                                   reserve_frac = label_both)) +
+    geom_ribbon(aes(
+      ymin = 1,
+      ymax = pmin(rel_annual_biomass, 1),
+      fill = "Biomass lower"
+    )) +
+    geom_ribbon(aes(
+      ymin = rel_annual_biomass,
+      ymax = pmin(rel_annual_biomass, 1),
+      fill = "Biomass higher"
+    )) +
+    geom_line(colour = "black") +
+    geom_segment(aes(
+      x = 1,
+      y = 1,
+      xend = 135,
+      yend = 1
+    ),
+    colour = "red",
+    linewidth = 0.6) +
+    scale_fill_manual(values = c("black", "grey80")) +
+    labs(fill = "Above/Below Biomass threshold") +
+    ggtitle(title_string) +
+    xlab("Year") +
+    ylab("Relative Biomass") +
+    ylim(0, NA) +
+    labs(colour = "Reserve\nfraction") +
+    theme_bw() +
+    scale_x_continuous(expand = expansion(mult = 0, add = 0)) +
+    theme(
+      axis.line = element_line(colour = "black"),
+      panel.background = element_rect(fill = "white")
+    )
+    
+    return(biom_ts_plt)
+}
+
+#' Creates a faceted plot of yield time series for a selected simulation run.
+#'
+#' @param bio_yield_df A data frame containing simulation results, including
+#'                     columns for: sim_num, reserve_frac, f_fmsy, year,
+#'                     biomass_at_age, yield, med_biomass, and med_yield.
+#' @param yield_thresh A numeric value indicating the yield threshold.
+#' @param exp_deets A list of strings providing details for the plot title:
+#'                   - Species  (e.g., "blue rockfish")
+#'                   - Dispersal  (e.g., "no dispersal")
+#'                   - Noise  (e.g., "white")
+#' @param r_seed An integer specifying the random seed for selecting a simulation run.
+#' @param frac_reserves A vector of reserve fractions to include in the plot.
+#' @param f_fmsys A vector of F/Fmsy values to include in the plot.
+#'
+#' @return A ggplot object containing the faceted yield time series plot.
+#'
+#' @details This function:
+#' 1. Selects a random simulation run.
+#' 2. Filters data for specified reserve fractions and F/Fmsy values.
+#' 3. Calculates relative biomass and yield.
+#' 4. Creates a faceted plot with:
+#'   - Time series of relative yield, with visual threshold indicator.
+#'   - Facets for different combinations of reserve fraction and F/Fmsy.
+#'
+#' @examples
+#' yld_ts_plot <- facet_plot_yld_ts_plots(bio_yield_df, exp_deets)
+#' print(yield_ts_plot)
+#'
+#' @export
+facet_plot_yld_ts_plots <- function(bio_yield_df,
+                                   biomass_thresh,
+                                   yield_thresh,
+                                   exp_deets,
+                                   r_seed = 34,
+                                   frac_reserves = c(0, 0.25, 0.50),
+                                   f_fmsys = c(0.52, 1.00, 2.09)) {
+  # Randomly select a simulation run to plot
+  set.seed(r_seed)
+  sim_2_use <-
+    sample(sort(unique(bio_yield_df$sim_num)), 1, replace = FALSE)
+  
+  u_f_fmsys <- unique(bio_yield_df$f_fmsy)
+  
+  u_f_fmsys <-
+    purrr::map_dbl(f_fmsys,  ~ u_f_fmsys[which.min(abs(u_f_fmsys - .x))])
+  
+  x_text_val <- 135/2
+  
+  title_string <- paste0(
+    "Simulation results: \n",
+    exp_deets[[2]],
+    " with ",
+    exp_deets[[1]],
+    " dispersal and ",
+    exp_deets[[3]],
+    " noise. \n"
+  )
+  
+  bio_yield_sel_df <- bio_yield_df %>%
+    dplyr::mutate(reserve_frac = as.numeric(reserve_frac),
+                  year = year - 500) %>%
+    dplyr::filter(sim_num == sim_2_use) %>%
+    dplyr::filter(reduce(map(
+      frac_reserves, near, x = reserve_frac, tol = 1e-4
+    ), `|`)) %>%
+    dplyr::filter(reduce(map(
+      u_f_fmsys, near, x = f_fmsy, tol = 1e-4
+    ), `|`)) %>%
+    dplyr::group_by(sim_num, reserve_frac, f_fmsy, year) %>%
+    dplyr::summarize(
+      annual_biomass = sum(biomass_at_age),
+      annual_yield = sum(yield),
+      rel_annual_biomass = sum(biomass_at_age) / biomass_thresh,
+      rel_annual_yield = sum(yield) / yield_thresh
+    ) %>%
+    dplyr::ungroup()
+  
+  ### Biomass
+  yield_ts_plt <- ggplot(bio_yield_sel_df,
+                        aes(x = year, y = rel_annual_yield)) +
+    facet_grid(reserve_frac ~ f_fmsy,
+               labeller = labeller(f_fmsy = label_both,
+                                   reserve_frac = label_both)) +
+    geom_ribbon(aes(
+      ymin = 1,
+      ymax = pmin(rel_annual_yield, 1),
+      fill = "Yield lower"
+    )) +
+    geom_ribbon(aes(
+      ymin = rel_annual_yield,
+      ymax = pmin(rel_annual_yield, 1),
+      fill = "Yield higher"
+    )) +
+    geom_line(colour = "black") +
+    geom_segment(aes(
+      x = 1,
+      y = 1,
+      xend = 135,
+      yend = 1
+    ),
+    colour = "red",
+    linewidth = 0.6) +
+    scale_fill_manual(values = c("black", "grey80")) +
+    labs(fill = "Above/Below Yield threshold") +
+    ggtitle(title_string) +
+    xlab("Year") +
+    ylab("Relative Yield") +
+    ylim(0, NA) +
+    labs(colour = "Reserve\nfraction") +
+    theme_bw() +
+    scale_x_continuous(expand = expansion(mult = 0, add = 0)) +
+    theme(
+      axis.line = element_line(colour = "black"),
+      panel.background = element_rect(fill = "white")
+    )
+  
+  return(yield_ts_plt)
+}
