@@ -253,20 +253,6 @@ Environmental noise: ENSO (MEI)
 ```{r}
 #| label: figure_4
 
-# # use species specific vB params to create a weight at age data.frame that can be used to convert abundance at age to biomass at age
-# species_name <- brf_mei_lp_nice[[2]]
-# brf_waa_g <- sim_species_parms[[species_name]][["biom_const"]] * sim_species_derived_vars[[species_name]][["length_at_age"]] ^
-#                     sim_species_parms[[species_name]][["biom_exp"]]
-# 
-# brf_waa_g_df <- data.frame(age = 1: sim_species_parms[[species_name]]$A_max,
-#                            waa_g = brf_waa_g)
-# 
-# # use functions to create useful data structures
-# # FLEP to F reference tables by species
-# spec_fleps_2_fs <-
-#   get_fs_from_fleps(species = species_name,
-#                     flep_inds = species_flep_fished_ind,
-#                     f_vals =  fishing_mortality_values) 
 
 ## Qry 
 
@@ -958,270 +944,83 @@ Biomass and yield contours for Blue rockfish
 #| label: supp_fig_1
 
 # Species: Blue rockfish
-# Dispersal: No Dispersal
+# Dispersal: No Dispersal/Larval Pool
 # Environmental noise: White
 
+sim_res_out_brf_nd_white <-
+  qry_get_sim_data_for_analysis(table_name = table_name_brf_nd_white)
+sim_res_out_brf_lp_white <-
+  qry_get_sim_data_for_analysis(table_name = table_name_brf_lp_white)
+
+
+F_brf_maxes_yield_brf_nd_white <-
+  get_f_maxes_yield(input_df = sim_res_out_brf_nd_white,
+                    fleps_2_fs = spec_fleps_2_fs_brf)
+F_brf_maxes_yield_brf_lp_white <-
+  get_f_maxes_yield(input_df = sim_res_out_brf_lp_white,
+                    fleps_2_fs = spec_fleps_2_fs_brf)
+
+out_fs_brf_nd_white <- df_add_fs_out(
+  input_df = sim_res_out_brf_nd_white,
+  spec_fleps_2_fs = spec_fleps_2_fs_brf,
+  F_maxes_yield = F_brf_maxes_yield_brf_nd_white,
+  waa_g_df = brf_waa_g_df
+)
+out_fs_brf_lp_white <- df_add_fs_out(
+  input_df = sim_res_out_brf_lp_white,
+  spec_fleps_2_fs = spec_fleps_2_fs_brf,
+  F_maxes_yield = F_brf_maxes_yield_brf_lp_white,
+  waa_g_df = brf_waa_g_df
+)
+
+med_yield_brf <- get_median_yield(input_df = out_fs_brf_nd_white) 
+
+med_biomass_brf <- get_median_biomass(input_df = out_fs_brf_nd_white)
+
+
+out_yld_bm_sims_f_frac_yr_brf_nd_white <-
+  df_yld_bm_stats_by_sim_f_frac_year(input_df = out_fs_brf_nd_white)
+out_yld_bm_sims_f_frac_yr_brf_lp_white <-
+  df_yld_bm_stats_by_sim_f_frac_year(input_df = out_fs_brf_lp_white)
+
+sum_stats_f_frac_df_brf_nd_white <-
+  summary_stats_by_f_frac(
+    out_sim_f_frac_yr = out_yld_bm_sims_f_frac_yr_brf_nd_white,
+    median_yield = med_yield_brf,
+    median_biomass = med_biomass_brf
+  )
+sum_stats_f_frac_df_brf_lp_white <-
+  summary_stats_by_f_frac(
+    out_sim_f_frac_yr = out_yld_bm_sims_f_frac_yr_brf_lp_white,
+    median_yield = med_yield_brf,
+    median_biomass = med_biomass_brf
+  )
+
+## Plotting
 p1 <-
-  plot_contour_bm_below_thresh(sum_stats_f_frac_df = ,
-                               spec_disp_noise = )
+  plot_contour_bm_below_thresh(sum_stats_f_frac_df = sum_stats_f_frac_df_brf_nd_white,
+                               spec_disp_noise = brf_nd_white_nice)
 
 p2 <-
-  plot_contour_yld_below_thresh(sum_stats_f_frac_df = ,
-                                spec_disp_noise = )
+  plot_contour_yld_below_thresh(sum_stats_f_frac_df = sum_stats_f_frac_df_brf_nd_white,
+                                spec_disp_noise = brf_nd_white_nice)
+p3 <-
+  plot_contour_bm_below_thresh(sum_stats_f_frac_df = sum_stats_f_frac_df_brf_lp_white,
+                               spec_disp_noise = brf_lp_white_nice)
 
-
-con <- DBI::dbConnect(duckdb::duckdb(),
-                        dbdir = "data/sim_out.duckdb",
-                        read_only = FALSE)
-
-
-# use species specific vB params to create a weight at age data.frame that can be used to convert abundance at age to biomass at age
-species_name <- brf_nd_mei_nice[[2]]
-brf_waa_g <- sim_species_parms[[species_name]][["biom_const"]] * sim_species_derived_vars[[species_name]][["length_at_age"]] ^
-                    sim_species_parms[[species_name]][["biom_exp"]]
-
-brf_waa_g_df <- data.frame(age = 1: sim_species_parms[[species_name]]$A_max,
-                           waa_g = brf_waa_g)
-
-# use functions to create useful data structures
-# FLEP to F reference tables by species
-spec_fleps_2_fs <-
-  get_fs_from_fleps(species = species_name,
-                    flep_inds = species_flep_fished_ind,
-                    f_vals =  fishing_mortality_values) 
-
-## Qry 
-qry <- paste0("SELECT  sim_num, reserve_frac, flep_ratio, year, age, 
-              sum(number) as abundance,
-              sum(yield) as yield,
-              FROM '", table_name_nd_white, 
-              "' WHERE sim_num IN (", toString(sims_2_use), ") AND year > 500 
-              GROUP BY sim_num, reserve_frac, flep_ratio, year, age
-              ORDER BY sim_num, reserve_frac, flep_ratio, year, age
-              ")
-
-sim_res_out <- dbGetQuery(conn = con, qry)
-
-F_brf_maxes_yield <- get_f_maxes_yield(input_df = sim_res_out,
-                                         fleps_2_fs = spec_fleps_2_fs)
-F_brf_maxes_yield
-
-out_fs <- df_add_fs_out (input_df = sim_res_out,
-                         spec_fleps_2_fs = spec_fleps_2_fs,
-                         F_maxes_yield = F_brf_maxes_yield, waa_g_df = brf_waa_g_df)
-out_fs
-
-med_yield <- get_median_yield(input_df = out_fs) 
-med_yield
-
-med_biomass <- get_median_biomass(input_df = out_fs, age_mat = sim_species_parms$`Blue rockfish`$A_mat)
-med_biomass
-
-out_yld_bm_sims_f_frac_yr <-
-  df_yld_bm_stats_by_sim_f_frac_year(input_df = out_fs,
-                                     age_mat = sim_species_parms$`Blue rockfish`$A_mat)#, sims_num_2_use = sims_2_use
-
-# out_yld_bm_sims_f_frac_yr
-# pipeline works to here
-
-sum_stats_f_frac_df <-
-  summary_stats_by_f_frac(
-    out_sim_f_frac_yr = out_yld_bm_sims_f_frac_yr,
-    median_yield = med_yield,
-    median_biomass = med_biomass
+p4 <-
+  plot_contour_yld_below_thresh(sum_stats_f_frac_df = sum_stats_f_frac_df_brf_lp_white,
+                                spec_disp_noise = brf_lp_white_nice)
+p_s1 <-
+  plot_grid(
+    p1,
+    p2,
+    p3,
+    p4,
+    labels = letters[1:4],
+    label_size = 9,
+    byrow = FALSE
   )
-sum_stats_f_frac_df
-
-
-
-## Plotting
-
-p1 <- sum_stats_f_frac_df[[2]] %>%
-  filter(as.numeric(reserve_frac) <= max_reserve_frac, f_fmsy <= max_f_fmsy) %>%
-  ggplot(.,
-       aes(x = as.numeric(reserve_frac), y = f_fmsy, z = yrs_below_biomass_thresh)) +
-  metR::geom_contour_fill(bins = 12) +
-  ggtitle(paste0(
-        brf_white_nd_nice[[2]],
-        " ",
-        brf_white_nd_nice[[1]],
-        " ",
-        brf_white_nd_nice[[3]],
-        ":\nTime below mean median biomass "
-      )) +
-      xlab("Fraction of coastline in reserves") +
-      ylab("Harvest Rate (F/Fmsy)") +
-      scale_fill_viridis_c(option = "D", direction = -1) +
-      geom_segment(aes(
-        x = 0,
-        xend = max_reserve_frac,
-        y = 1,
-        yend = 1
-      ), colour = "black",
-      linetype = 2) +
-      scale_x_continuous(expand = expansion(mult = 0, add = 0), limits = c(0, 0.3)) +
-      scale_y_continuous(expand = expansion(mult = 0, add = 0)) +
-      theme_bw()
-
-
-p2 <- sum_stats_f_frac_df[[2]] %>%
-  filter(as.numeric(reserve_frac) <= max_reserve_frac, f_fmsy <= max_f_fmsy) %>%
-  ggplot(.,
-       aes(x = as.numeric(reserve_frac), y = f_fmsy, z = yrs_below_yield_thresh)) +
-  metR::geom_contour_fill(bins = 12) + 
-  ggtitle(paste0(
-        brf_white_nd_nice[[2]],
-        " ",
-        brf_white_nd_nice[[1]],
-        " ",
-        brf_white_nd_nice[[3]],
-        ":\nTime below median max yield"
-      )) +
-      xlab("Fraction of coastline in reserves") +
-      ylab("Harvest Rate (F/Fmsy)") +
-      scale_fill_viridis_c(option = "D", direction = -1) +
-      geom_segment(aes(
-        x = 0,
-        xend = max_reserve_frac,
-        y = 1,
-        yend = 1
-      ), colour = "black",
-      linetype = 2) +
-      scale_x_continuous(expand = expansion(mult = 0, add = 0), limits = c(0, 0.3)) +
-      scale_y_continuous(expand = expansion(mult = 0, add = 0)) +
-      theme_bw()
-
-
-
-# Species: Blue rockfish
-# Dispersal: Larval Pool Dispersal
-# Environmental noise: White
-# use species specific vB params to create a weight at age data.frame that can be used to convert abundance at age to biomass at age
-species_name <- brf_mei_lp_nice[[2]]
-brf_waa_g <- sim_species_parms[[species_name]][["biom_const"]] * sim_species_derived_vars[[species_name]][["length_at_age"]] ^
-                    sim_species_parms[[species_name]][["biom_exp"]]
-
-brf_waa_g_df <- data.frame(age = 1: sim_species_parms[[species_name]]$A_max,
-                           waa_g = brf_waa_g)
-
-# use functions to create useful data structures
-# FLEP to F reference tables by species
-spec_fleps_2_fs <-
-  get_fs_from_fleps(species = species_name,
-                    flep_inds = species_flep_fished_ind,
-                    f_vals =  fishing_mortality_values) 
-
-## Qry 
-qry <- paste0("SELECT  sim_num, reserve_frac, flep_ratio, year, age, 
-              sum(number) as abundance,
-              sum(yield) as yield,
-              FROM '", table_name_lp_white, 
-              "' WHERE sim_num IN (", toString(sims_2_use), ") AND year > 500 
-              GROUP BY sim_num, reserve_frac, flep_ratio, year, age
-              ORDER BY sim_num, reserve_frac, flep_ratio, year, age
-              ")
-
-sim_res_out <- dbGetQuery(conn = con, qry)
-
-#######
-
-
-########### PIPELINING
-F_brf_maxes_yield <- get_f_maxes_yield(input_df = sim_res_out,
-                                         fleps_2_fs = spec_fleps_2_fs)
-F_brf_maxes_yield
-
-out_fs <- df_add_fs_out (input_df = sim_res_out,
-                         spec_fleps_2_fs = spec_fleps_2_fs,
-                         F_maxes_yield = F_brf_maxes_yield, waa_g_df = brf_waa_g_df)
-out_fs
-
-med_yield <- get_median_yield(input_df = out_fs) 
-med_yield
-
-med_biomass <- get_median_biomass(input_df = out_fs,
-                                  age_mat = sim_species_parms$`Blue rockfish`$A_mat)
-med_biomass
-
-out_yld_bm_sims_f_frac_yr <-
-  df_yld_bm_stats_by_sim_f_frac_year(input_df = out_fs, 
-                                     age_mat = sim_species_parms$`Blue rockfish`$A_mat)
-
-# pipeline works to here
-
-sum_stats_f_frac_df <-
-  summary_stats_by_f_frac(
-    out_sim_f_frac_yr = out_yld_bm_sims_f_frac_yr,
-    median_yield = med_yield,
-    median_biomass = med_biomass
-  )
-sum_stats_f_frac_df
-
-## Plotting
-
-p3 <- sum_stats_f_frac_df[[2]] %>%
-  filter(as.numeric(reserve_frac) <= max_reserve_frac, f_fmsy <= max_f_fmsy) %>%
-  ggplot(.,
-       aes(x = as.numeric(reserve_frac), y = f_fmsy, z = yrs_below_biomass_thresh)) +
-  metR::geom_contour_fill(bins = 12) +
-  ggtitle(paste0(
-        brf_white_lp_nice[[2]],
-        " ",
-        brf_white_lp_nice[[1]],
-        " ",
-        brf_white_lp_nice[[3]],
-        ":\nTime below mean median biomass "
-      )) +
-      xlab("Fraction of coastline in reserves") +
-      ylab("Harvest Rate (F/Fmsy)") +
-      scale_fill_viridis_c(option = "D", direction = -1) +
-      geom_segment(aes(
-        x = 0,
-        xend = max_reserve_frac,
-        y = 1,
-        yend = 1
-      ), colour = "black",
-      linetype = 2) +
-      scale_x_continuous(expand = expansion(mult = 0, add = 0), limits = c(0, 0.3)) +
-      scale_y_continuous(expand = expansion(mult = 0, add = 0)) +
-      theme_bw()
-
-
-p4 <- sum_stats_f_frac_df[[2]] %>%
-  filter(as.numeric(reserve_frac) <= max_reserve_frac, f_fmsy <= max_f_fmsy) %>%
-  ggplot(.,
-       aes(x = as.numeric(reserve_frac), y = f_fmsy, z = yrs_below_yield_thresh)) +
-  metR::geom_contour_fill(bins = 12) + 
-  ggtitle(paste0(
-        brf_white_lp_nice[[2]],
-        " ",
-        brf_white_lp_nice[[1]],
-        " ",
-        brf_white_lp_nice[[3]],
-        ":\nTime below median max yield"
-      )) +
-      xlab("Fraction of coastline in reserves") +
-      ylab("Harvest Rate (F/Fmsy)") +
-      scale_fill_viridis_c(option = "D", direction = -1) +
-      geom_segment(aes(
-        x = 0,
-        xend = max_reserve_frac,
-        y = 1,
-        yend = 1
-      ), colour = "black",
-      linetype = 2) +
-      scale_x_continuous(expand = expansion(mult = 0, add = 0), limits = c(0, 0.3)) +
-      scale_y_continuous(expand = expansion(mult = 0, add = 0)) +
-      theme_bw()
-
-
-# print(p1)
-# print(p2)
-# print(p3)
-# print(p4)
-
-
-p_s1 <- plot_grid(p1, p2, p3, p4, labels = letters[1:4], label_size = 9, byrow = FALSE)
 
 print(p_s1)
 
@@ -1234,7 +1033,7 @@ ggsave(filename = "output/supp_figs/sup_fig1-brf-biomass-yield-white-nd-lp.svg",
        width = 12,
        height = 8)
 
-DBI::dbDisconnect(conn = con, shutdown=TRUE)
+# DBI::dbDisconnect(conn = con, shutdown=TRUE)
 
 ```
 
@@ -1307,10 +1106,6 @@ p2 <- chr_nd_mei_sum_stats_f_frac_df[[2]] %>%
       scale_x_continuous(expand = expansion(mult = 0, add = 0), limits = c(0, 0.3)) +
       scale_y_continuous(expand = expansion(mult = 0, add = 0)) +
       theme_bw()
-
-print(p1)
-print(p2)
-
 
 ### Cabezon
 # Biomass
@@ -1529,15 +1324,4 @@ ggsave(filename = "output/supp_figs/sup-fig3-cab-chr-lp-disp-mei-yld-biom.svg",
 
 ```
 
-### Supp Fig 4
-
-Yield contours for Cabezon and China rockfish
-
--   white noise (or do we want ENSO?) --- white vs ENSO
-
--   Larval pool dispersal
-
-```{r}
-#| label: supp_fig_4
-#| 
-```
+### 
