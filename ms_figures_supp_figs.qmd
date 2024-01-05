@@ -341,7 +341,7 @@ biom_ts_plt <- facet_plot_bm_ts_plots(
   yield_thresh = med_yield_brf,
   exp_deets = brf_lp_mei_nice,
   r_seed = 34,
-  frac_reserves = c(0, 0.25, 0.50),
+  frac_reserves = c(0, 0.15, 0.30),
   f_fmsys = c(0, 0.5, 1.00, 2.)
 )
 
@@ -351,7 +351,7 @@ yield_ts_plt <- facet_plot_yld_ts_plots(
   yield_thresh = med_yield_brf,
   exp_deets = brf_lp_mei_nice,
   r_seed = 34,
-  frac_reserves = c(0, 0.25, 0.50),
+  frac_reserves = c(0, 0.15, 0.30),
   f_fmsys = c(0.5, 1.00, 2.)
 )
 
@@ -377,7 +377,7 @@ ggsave(filename = "output/main_figs/fig6-yield-timeseries-brf-lp-mei.svg", plot 
 #| label: fig_5_text
 ### Biomass
 
-frac_reserves <- c(0, 0.25, 0.5)
+frac_reserves <- c(0, 0.15, 0.3)
 f_fmsys <- c(0, 0.5, 1.00, 2)
 
 u_f_fmsys <- unique(sum_stats_f_frac_df_brf_lp_mei[[2]]$f_fmsy)
