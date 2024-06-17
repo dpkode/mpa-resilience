@@ -32,5 +32,4 @@ to run the simulations using the [R targets package](https://books.ropensci.org/
 
 Note: running 5 simulations for the parameter set used in the manuscript produces an approx. 29GB duckdb database with 12 tables.
 
-After running the simulations, figures can be created by running the code in the file `ms_figures_supp_figs.qmd`. To render the file `ms_figures_supp_figs.qmd`, [install Quarto](https://quarto.org/docs/get-started/) or, if using RStudio, use the `Run --> Run all` () 
-
+After running the simulations, figures can be created by running the code in the file `ms_figures_supp_figs.qmd`. To render the file `ms_figures_supp_figs.qmd`, [install Quarto](https://quarto.org/docs/get-started/) or, if using RStudio, use the `Run --> Run all`.

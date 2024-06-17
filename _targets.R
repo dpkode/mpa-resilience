@@ -243,7 +243,7 @@ list(
              "mei_135"),
   tar_target(white_noise_135,
              matrix(data = rnorm(n_years_135 * sim_nums, 0, sd_recruitment), 
-                    ncol = sim_nums, nrow = n_years, byrow = FALSE)),
+                    ncol = sim_nums, nrow = n_years_135, byrow = FALSE)),
   tar_target(enso_dat_135,
              make_ann_mei_ext()),
   tar_target(

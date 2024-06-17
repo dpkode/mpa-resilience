@@ -3,9 +3,6 @@
 .RData
 .Ruserdata
 .DS_Store
-data
-*.zip
-*.png
-*.svg
-*.docx
-misc/
+output/
+data/sim_out.duckdb
+data/rev_response_sim_out_db_prod.duckdb

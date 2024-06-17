@@ -23,7 +23,7 @@
 #'
 #' sp_parms <- load_species_parms() # add how to use in targets workflow
 #'
-#### USED
+
 load_species_parms <-
   function(fp = file.path("data", "species_parameters.csv")) {
     spec_parms_fp <- fp
@@ -482,6 +482,58 @@ get_index_for_fleps <- function(flep_vals,
 }
 
 
+#'
+#' @title make a species specific Leslie matrix for each patch at a specified
+#' level of FLEP (e.g., fishing mortality)
+#'
+#' @description creates a matrix (or array -- one matrix for each patch) that contains
+#' age-specific fecundity values on the first row and survival from age a-1 to
+#' age a on the sub-diagonal (a Leslie matrix)
+#'
+#' @return returns a Leslie matrix (or multiple Leslie matrices as an array, with
+#' one matrix for each patch)
+#'
+#' @param num_patches the number of patches included in the model
+#' @param surv_fished_matrix a matrix of cumulative
+#' survival to each age at many levels of fishing mortality
+#' @param surv_fished_ind index of the column that corresponds the survival vector for a
+#' given level of fishing (or FLEP - the fraction of lifetime egg production)
+#' @param age_max numeric the value of the maximum age for a selected species
+#' @param fecundity_at_age vector of fecundity (number of eggs produced) at each age
+#'
+#' @examples
+#'
+#' les_mat_cbzn_F0 <- make_leslie_mat(num_patches = 1,
+#'                                    surv_fished_matrix = derived_vars_cbzn$surv_fished,
+#'                                    surv_fished_ind = 1,
+#'                                    age_max = lh_parms_cbzn$A_max,
+#'                                    fecundity_at_age = derived_vars_cbzn$fecundity_at_age
+#'                                    )
+#' les_mat_cbzn_FLEP40 <- make_leslie_mat(num_patches = 1,
+#'                                        surv_fished_matrix = derived_vars_cbzn$surv_fished,
+#'                                        surv_fished_ind = flep_ind_cbzn_40,
+#'                                        age_max = lh_parms_cbzn$A_max,
+#'                                        fecundity_at_age = derived_vars_cbzn$fecundity_at_age
+#'                                        )
+#'
+
+make_leslie_mat <- function(num_patches = 1,
+                            surv_fished_mat,
+                            surv_fished_ind,
+                            age_max,
+                            fecundity_at_age) {
+  leslie_matrix <-
+    array(0, dim = c(age_max, age_max, num_patches)) # create a 3D array to contain Leslie matrices for each "patch"
+  for (i in 1:num_patches) {
+    leslie_matrix[2:age_max, 1:(age_max - 1), i] <-
+      diag(surv_fished_mat[, surv_fished_ind[i]])
+    leslie_matrix[1, , i] <-
+      fecundity_at_age # add in fecundities on top row
+  }
+  
+  return(leslie_matrix)
+}
+
 #' Create Leslie matrices to project each species based on  fishing effort level
 #'
 #' @param sp_names A vector of species names
@@ -496,7 +548,7 @@ get_index_for_fleps <- function(flep_vals,
 #' @examples
 #' sp_names <- c("sp1", "sp2")
 #' fleps <- c(0.1, 0.2)
-#' n_patch <- 10
+#' n_patch <- 2
 #' sim_sp_parms <- list(sp1 = list(A_max = 10, W_inf = 1), sp2 = list(A_max = 5, W_inf = 2))
 #' sim_sp_derived_vars <- list(sp1 = list(surv_fished = c(0.9, 0.8), fecundity_at_age = c(0.1, 0.2)), sp2 = list(surv_fished = c(0.7, 0.6), fecundity_at_age = c(0.3, 0.4)))
 #' sp_flep_fished_ind <- list(sp1 = c(1, 2), sp2 = c(2, 1))
@@ -786,7 +838,7 @@ run_sims_sm_write <- function(expmts,
     for (j in 1:length(spec_name)) {
       for (k in noise_vec) {
         for (l in 1:length(recr_sd)) {
-          for (m in 1:num_sims) {
+          for (m in 1:num_sims) { 
             for (n in 1:length(frac_reserves)) {
               for (o in 1:length(fleps)) {
                 dt_one <- data.table(sim_num = m, 
@@ -845,33 +897,51 @@ run_sims_sm_write <- function(expmts,
                 
                 dt_one <- dt_one[, c(1,2,3,4,5,6,7,11)]
                 
-                if (n == 1 & o == 1) {
+                # if (n == 1 & o == 1) {
+                if (o == 1) {
                   dt_ddb <- dt_one
                   rm(dt_one)
                 } else {
                   dt_ddb <- rbind(dt_ddb, dt_one)
                   rm(dt_one)
                 }
-              }
-            }
+              } # o
+              tab_name <- paste0(expmts[i],
+                                 "_",
+                                 tolower(sub(" ", "_", spec_name[j])),
+                                 "_",
+                                 k,
+                                 "_",
+                                 substring(as.character(recr_sd[l]), 3))
+              
+              duckdb::dbWriteTable(con,
+                                   tab_name,
+                                   dt_ddb,
+                                   append = TRUE) # FALSE
+              rm(dt_ddb)
+            } # n
             
-            tab_name <- paste0(expmts[i], "_", tolower(sub(
-              " ", "_", spec_name[j]
-            )), "_", k, "_", substring(as.character(recr_sd[l]), 3))
+            # tab_name <- paste0(expmts[i],
+            #                    "_",
+            #                    tolower(sub(" ", "_", spec_name[j])),
+            #                    "_",
+            #                    k,
+            #                    "_",
+            #                    substring(as.character(recr_sd[l]), 3))
+            # 
+            # duckdb::dbWriteTable(con,
+            #                      tab_name,
+            #                      dt_ddb,
+            #                      append = TRUE) # FALSE
+            # rm(dt_ddb)
             
-            duckdb::dbWriteTable(con,
-                                 tab_name,
-                                 dt_ddb,
-                                 append = TRUE) # FALSE
-            rm(dt_ddb)
-            
-          }
-        }
-      }
+          } # m
+        } # l   
+      } # k 
       print(paste0("dispersal: ", expmts[i], " and species: ", spec_name[j],
                    " and ", k, " noise ", " and recruit sd of ", recr_sd[l]))
-    }
-  }
+    } # j 
+  } # i
   DBI::dbDisconnect(con, shutdown = TRUE)
   return(dt)
 }

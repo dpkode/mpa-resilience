@@ -1,0 +1,21 @@
+species,M,L_inf,k,t_0,F_mort,A_max,A_mat,A_fish,biom_const,biom_exp
+Pacific cod,0.54,99.46,0.17,0,0.2,20,5,6,5.631e-06,3.1306
+Kelp rockfish,0.2,37.8,0.23,0,0.17,25,3,3,1,3
+Blue rockfish,0.14,38.15,0.17,-1.34,NaN,44,6,8,1,3.09
+Black rockfish,0.14,45.11,0.33,0,NaN,50,7,4,1,3
+Gopher rockfish,0.2,34.1,0.23,0,NaN,30,3,6,1,3
+Lingcod,0.25,96.74,0.17,0,NaN,25,3,4,1,3
+Copper rockfish,0.09,56.5,0.14,0,NaN,100,5,5,1,3
+California scorpionfish,0.25,40.29,0.13,-1.9,NaN,21,2,5,1,3
+Brown rockfish,0.14,51.4,0.16,0,NaN,34,4,4,1,3
+Yellowtail rockfish,0.11,49.88,0.18,-1.95,NaN,64,6,4,1,3
+Vermilion rockfish,0.1,53.92,0.16,0,NaN,65,7,3,1,3
+Bocaccio,0.15,70,0.22,0,NaN,55,3,3,1,3
+China rockfish,0.06,33.62,0.23,0,NaN,83,7,10,1,3
+Cabezon,0.28,49.9,0.28,0,NaN,17,3,4,1,3
+Kelp greenling,0.3,41.15,0.24,0,NaN,25,3,4,1,3
+California sheephead,0.25,46.7,0.18,0,NaN,53,4,6,1,3
+Red sea urchin,0.07,33.15,0.23,0,NaN,100,3,6,1,3
+Kelp bass,0.18,69.8,0.23,0,NaN,33,3,6,1,3
+Olive rockfish,0.14,33.62,0.23,0,NaN,30,4,3,1,3
+Black and yellow rockfish,0.2,24.95,0.23,0,NaN,30,5,14,1,3
